@@ -37,8 +37,9 @@ inline int cmdHist(const ArgParser &args) {
         return 1;
     }
     std::string channel = args.get("-c", "--channel", "r");
-    //std::cerr << "hist: not implemented (channel=" << channel << ", output=" << (output.empty() ? "stdout" : output) << ")\n";
     Histogram hist(image);
-    hist.printHistogram(0);
+    for (int i = 0; i < image.getChannels(); i++) {
+        hist.printHistogram(i);
+    }
     return 0;
 }

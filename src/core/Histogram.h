@@ -10,6 +10,6 @@ public:
     void printHistogram(int channel) const;
 private:
     void computeGreyscaleHistogram(const Image &image);
-    void computeRGBHistogram();
+    void computeRGBHistogram(const Image &image);
     int histogram[256][3]{};
 };
