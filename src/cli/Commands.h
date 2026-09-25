@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -13,10 +14,11 @@ inline void printUsage(const char *prog) {
               << "Histogram toolkit for images.\n"
               << "\n"
               << "Commands:\n"
-              << "  hist     <input>                     Compute the histogram\n"
+              << "  hist <input> [-o <file>]  Export the histogram as CSV\n"
               << "\n"
               << "Options:\n"
-              << "  -h, --help               Show this help message\n"
+              << "  -o, --output <file>     Output file (default: stdout)\n"
+              << "  -h, --help              Show this help message\n"
               << "\n";
 }
 
@@ -36,10 +38,17 @@ inline int cmdHist(const ArgParser &args) {
     if (!loadOrFail(args.positional(0), image)) {
         return 1;
     }
-    std::string channel = args.get("-c", "--channel", "r");
     Histogram hist(image);
-    for (int i = 0; i < image.getChannels(); i++) {
-        hist.printHistogram(i);
+    std::string output = args.get("-o", "--output");
+    if (output.empty()) {
+        hist.exportHistogram();
+        return 0;
     }
+    std::ofstream file(output);
+    if (!file) {
+        std::cerr << "Error: cannot open output file: " << output << "\n";
+        return 1;
+    }
+    hist.exportHistogram(file);
     return 0;
 }
