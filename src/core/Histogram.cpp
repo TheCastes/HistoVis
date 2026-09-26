@@ -40,6 +40,21 @@ std::array<float, 256> Histogram::getPDF(Channel channel) const {
     return pdf;
 }
 
+std::array<float, 256> Histogram::getCDF(Channel channel) const {
+    std::array<float, 256> cdf{};
+    if (res == 0) {
+        return cdf;
+    }
+    int sum = 0;
+    for (int i = 0; i < 256; i++) {
+        sum += histogram[index(channel)][i];
+        cdf[i] = static_cast<float>(sum) / res;
+    }
+    return cdf;
+}
+
+
+
 void Histogram::exportHistogram(std::ostream &out, bool luminance) const {
     if (luminance || greyscale) {
         const std::array<int, 256> &h = histogram[index(luminance ? Channel::L : Channel::R)];
@@ -70,7 +85,25 @@ void Histogram::exportPDF(std::ostream &out, bool luminance) const {
     std::array<float, 256> r = getPDF(Channel::R);
     std::array<float, 256> g = getPDF(Channel::G);
     std::array<float, 256> b = getPDF(Channel::B);
-    out << "value,r,g,b\n";
+    out << "value,rprob,gprob,bprob\n";
+    for (int i = 0; i < 256; i++) {
+        out << i << "," << r[i] << "," << g[i] << "," << b[i] << "\n";
+    }
+}
+
+void Histogram::exportCDF(std::ostream &out, bool luminance) const {
+    if (luminance || greyscale) {
+        std::array<float, 256> p = getCDF(luminance ? Channel::L : Channel::R);
+        out << "value,cumulative\n";
+        for (int i = 0; i < 256; i++) {
+            out << i << "," << p[i] << "\n";
+        }
+        return;
+    }
+    std::array<float, 256> r = getCDF(Channel::R);
+    std::array<float, 256> g = getCDF(Channel::G);
+    std::array<float, 256> b = getCDF(Channel::B);
+    out << "value,rprob,gprob,bprob\n";
     for (int i = 0; i < 256; i++) {
         out << i << "," << r[i] << "," << g[i] << "," << b[i] << "\n";
     }

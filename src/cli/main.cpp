@@ -28,6 +28,9 @@ int main(int argc, char *argv[]) {
     if (command == "pdf") {
         return cmdPdf(args);
     }
+    if (command == "cdf") {
+        return cmdCdf(args);
+    }
 
     std::cerr << "Error: unknown command: " << command << "\n";
     printUsage(argv[0]);

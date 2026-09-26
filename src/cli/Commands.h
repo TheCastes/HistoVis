@@ -16,6 +16,7 @@ inline void printUsage(const char *prog) {
               << "Commands:\n"
               << "  hist <input> [-o <file>] [-l]  Export the histogram as CSV\n"
               << "  pdf  <input> [-o <file>] [-l]  Export the PDF as CSV\n"
+              << "  cdf  <input> [-o <file>] [-l]  Export the CDF as CSV\n"
               << "\n"
               << "Options:\n"
               << "  -o, --output <file>       Output file (default: stdout)\n"
@@ -73,5 +74,32 @@ inline int cmdPdf(const ArgParser &args) {
         return 1;
     }
     hist.exportPDF(file, luminance);
+    return 0;
+}
+
+inline int cmdCdf(const ArgParser &args) {
+    const std::string &input = args.positional(0);
+    if (input.empty()) {
+        std::cerr << "Error: missing input image\n";
+        return 1;
+    }
+    Image image(input.c_str());
+    if (!image.isValid()) {
+        return 1;
+    }
+
+    Histogram hist(image);
+    bool luminance = args.has("-l", "--luminance");
+    std::string output = args.get("-o", "--output");
+    if (output.empty()) {
+        hist.exportCDF(std::cout, luminance);
+        return 0;
+    }
+    std::ofstream file(output);
+    if (!file) {
+        std::cerr << "Error: cannot open output file: " << output << "\n";
+        return 1;
+    }
+    hist.exportCDF(file, luminance);
     return 0;
 }

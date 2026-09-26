@@ -13,11 +13,14 @@ public:
     ~Histogram() = default;
     const std::array<int, 256>& getHistogram(Channel channel) const;
     std::array<float, 256> getPDF(Channel channel) const;
+    std::array<float, 256> getCDF(Channel channel) const;
+
     bool isGreyscale() const {
         return greyscale;
     }
     void exportHistogram(std::ostream &out = std::cout, bool luminance = false) const;
     void exportPDF(std::ostream &out = std::cout, bool luminance = false) const;
+    void exportCDF(std::ostream &out = std::cout, bool luminance = false) const;
 
 private:
     void compute(const Image &image);
