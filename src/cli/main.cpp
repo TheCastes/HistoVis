@@ -16,7 +16,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    ArgParser args(argc, argv, 2);
+    ArgParser args(argc, argv, 2, {"-l", "--luminance", "-h", "--help"});
     if (args.has("-h", "--help")) {
         printUsage(argv[0]);
         return 0;
@@ -24,6 +24,9 @@ int main(int argc, char *argv[]) {
 
     if (command == "hist") {
         return cmdHist(args);
+    }
+    if (command == "pdf") {
+        return cmdPdf(args);
     }
 
     std::cerr << "Error: unknown command: " << command << "\n";

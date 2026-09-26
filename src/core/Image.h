@@ -63,10 +63,14 @@ class Image {
         Pixel p;
         size_t index = (y * width + x) * channels;
         p.R = data[index];
-        p.G = data[index+1];
-        p.B = data[index+2];
-        if (channels == 4) {
-            p.A = data[index+3];
+        if (channels >= 3) {
+            p.G = data[index+1];
+            p.B = data[index+2];
+        } else {
+            p.G = p.B = p.R;
+        }
+        if (channels == 2 || channels == 4) {
+            p.A = data[index + channels - 1];
         }
         return p;
     }
@@ -74,10 +78,12 @@ class Image {
     void setPixel(int x, int y, const Pixel &p) const {
         size_t index = (y * width + x) * channels;
         data[index] = std::clamp(p.R, 0, 255);
-        data[index+1] = std::clamp(p.G, 0, 255);
-        data[index+2] = std::clamp(p.B, 0, 255);
-        if (channels == 4) {
-            data[index+3] = std::clamp(p.A, 0, 255);
+        if (channels >= 3) {
+            data[index+1] = std::clamp(p.G, 0, 255);
+            data[index+2] = std::clamp(p.B, 0, 255);
+        }
+        if (channels == 2 || channels == 4) {
+            data[index + channels - 1] = std::clamp(p.A, 0, 255);
         }
     }
 

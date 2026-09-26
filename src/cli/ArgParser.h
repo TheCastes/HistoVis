@@ -1,12 +1,13 @@
 #pragma once
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
 class ArgParser {
 public:
-    ArgParser(int argc, char *argv[], int start = 1) {
+    ArgParser(int argc, char *argv[], int start = 1, const std::set<std::string> &flags = {}) {
         for (int i = start; i < argc; i++) {
             std::string argument = argv[i];
             if (argument.size() > 1 && argument[0] == '-') {
@@ -16,7 +17,7 @@ public:
                 if (eq != std::string::npos) {
                     key = argument.substr(0, eq);
                     value = argument.substr(eq + 1);
-                } else if (i + 1 < argc && argv[i + 1][0] != '-') {
+                } else if (flags.count(key) == 0 && i + 1 < argc && argv[i + 1][0] != '-') {
                     value = argv[++i];
                 }
                 options[key] = value;

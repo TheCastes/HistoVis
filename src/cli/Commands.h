@@ -14,34 +14,31 @@ inline void printUsage(const char *prog) {
               << "Histogram toolkit for images.\n"
               << "\n"
               << "Commands:\n"
-              << "  hist <input> [-o <file>]  Export the histogram as CSV\n"
+              << "  hist <input> [-o <file>] [-l]  Export the histogram as CSV\n"
+              << "  pdf  <input> [-o <file>] [-l]  Export the PDF as CSV\n"
               << "\n"
               << "Options:\n"
-              << "  -o, --output <file>     Output file (default: stdout)\n"
-              << "  -h, --help              Show this help message\n"
+              << "  -o, --output <file>       Output file (default: stdout)\n"
+              << "  -l, --luminance           Export luminance instead of the channels\n"
+              << "  -h, --help                Show this help message\n"
               << "\n";
 }
 
-inline bool loadOrFail(const std::string &path, Image &image) {
-    if (path.empty()) {
-        std::cerr << "Error: missing input image\n";
-        return false;
-    }
-    if (!image.isValid()) {
-        return false;
-    }
-    return true;
-}
-
 inline int cmdHist(const ArgParser &args) {
-    Image image(args.positional(0).c_str());
-    if (!loadOrFail(args.positional(0), image)) {
+    const std::string &input = args.positional(0);
+    if (input.empty()) {
+        std::cerr << "Error: missing input image\n";
+        return 1;
+    }
+    Image image(input.c_str());
+    if (!image.isValid()) {
         return 1;
     }
     Histogram hist(image);
+    bool luminance = args.has("-l", "--luminance");
     std::string output = args.get("-o", "--output");
     if (output.empty()) {
-        hist.exportHistogram();
+        hist.exportHistogram(std::cout, luminance);
         return 0;
     }
     std::ofstream file(output);
@@ -49,6 +46,32 @@ inline int cmdHist(const ArgParser &args) {
         std::cerr << "Error: cannot open output file: " << output << "\n";
         return 1;
     }
-    hist.exportHistogram(file);
+    hist.exportHistogram(file, luminance);
+    return 0;
+}
+
+inline int cmdPdf(const ArgParser &args) {
+    const std::string &input = args.positional(0);
+    if (input.empty()) {
+        std::cerr << "Error: missing input image\n";
+        return 1;
+    }
+    Image image(input.c_str());
+    if (!image.isValid()) {
+        return 1;
+    }
+    Histogram hist(image);
+    bool luminance = args.has("-l", "--luminance");
+    std::string output = args.get("-o", "--output");
+    if (output.empty()) {
+        hist.exportPDF(std::cout, luminance);
+        return 0;
+    }
+    std::ofstream file(output);
+    if (!file) {
+        std::cerr << "Error: cannot open output file: " << output << "\n";
+        return 1;
+    }
+    hist.exportPDF(file, luminance);
     return 0;
 }

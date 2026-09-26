@@ -1,5 +1,6 @@
 #include "Histogram.h"
 
+#include <cmath>
 #include <iostream>
 
 Histogram::Histogram(const Image &image) {
@@ -7,70 +8,70 @@ Histogram::Histogram(const Image &image) {
         std::cerr << "Histogram: Error, invalid image\n";
         return;
     }
-    greyscale = image.getChannels() == 1;
-    if (greyscale) {
-        computeGreyscaleHistogram(image);
-    } else {
-        computeRGBHistogram(image);
-    }
+    greyscale = image.getChannels() < 3;
+    res = image.getRes();
+    compute(image);
 }
 
-
-void Histogram::computeGreyscaleHistogram(const Image &image) {
-    for (int i = 0; i < 256; i++) {
-        for (int j = 0; j < image.getWidth(); j++) {
-            for (int k = 0; k < image.getHeight(); k++) {
-                Pixel p = image.getPixel(j, k);
-                if (p.R == i) {
-                    histogram[0][i]++;
-                }
-            }
+void Histogram::compute(const Image &image) {
+    for (int y = 0; y < image.getHeight(); y++) {
+        for (int x = 0; x < image.getWidth(); x++) {
+            Pixel p = image.getPixel(x, y);
+            histogram[index(Channel::R)][p.R]++;
+            histogram[index(Channel::G)][p.G]++;
+            histogram[index(Channel::B)][p.B]++;
+            histogram[index(Channel::L)][std::lround(0.2126 * p.R + 0.7152 * p.G + 0.0722 * p.B)]++; // Y with ITU-R BT.709 constants
         }
     }
 }
 
-void Histogram::computeRGBHistogram(const Image &image) {
-    for (int i = 0; i < image.getChannels(); i++) {
-        for (int j = 0; j < 256; j++) {
-            for (int k = 0; k < image.getWidth(); k++) {
-                for (int l = 0; l < image.getHeight(); l++) {
-                    Pixel p = image.getPixel(k, l);
-                    switch(i) {
-                        case 0:
-                        if (p.R == j) histogram[0][j]++;
-                        break;
-                        case 1:
-                        if (p.G == j) histogram[1][j]++;
-                        break;
-                        case 2:
-                        if (p.B == j) histogram[2][j]++;
-                        break;
-                    default: ;
-                    }
-                }
-            }
+const std::array<int, 256>& Histogram::getHistogram(Channel channel) const {
+    return histogram[index(channel)];
+}
+
+std::array<float, 256> Histogram::getPDF(Channel channel) const {
+    std::array<float, 256> pdf{};
+    if (res == 0) {
+        return pdf;
+    }
+    for (int i = 0; i < 256; i++) {
+        pdf[i] = static_cast<float>(histogram[index(channel)][i]) / res;
+    }
+    return pdf;
+}
+
+void Histogram::exportHistogram(std::ostream &out, bool luminance) const {
+    if (luminance || greyscale) {
+        const std::array<int, 256> &h = histogram[index(luminance ? Channel::L : Channel::R)];
+        out << "value,count\n";
+        for (int i = 0; i < 256; i++) {
+            out << i << "," << h[i] << "\n";
         }
+        return;
+    }
+    const std::array<int, 256> &r = histogram[index(Channel::R)];
+    const std::array<int, 256> &g = histogram[index(Channel::G)];
+    const std::array<int, 256> &b = histogram[index(Channel::B)];
+    out << "value,r,g,b\n";
+    for (int i = 0; i < 256; i++) {
+        out << i << "," << r[i] << "," << g[i] << "," << b[i] << "\n";
     }
 }
 
-const std::array<int, 256> &Histogram::getHistogram(int channel) const {
-    return histogram[channel];
-}
-
-void Histogram::printHistogram(int channel) const {
-    std::cout << "Histogram for channel " << channel << ":\n";
-    for (int i = 0; i < 256; i++) {
-        std::cout << i << ": " << histogram[channel][i] << "\n";
-    }
-}
-
-void Histogram::exportHistogram(std::ostream &out) const {
-    out << (greyscale ? "value,count\n" : "value,r,g,b\n");
-    for (int i = 0; i < 256; i++) {
-        out << i << "," << histogram[0][i];
-        if (!greyscale) {
-            out << "," << histogram[1][i] << "," << histogram[2][i];
+void Histogram::exportPDF(std::ostream &out, bool luminance) const {
+    if (luminance || greyscale) {
+        std::array<float, 256> p = getPDF(luminance ? Channel::L : Channel::R);
+        out << "value,probability\n";
+        for (int i = 0; i < 256; i++) {
+            out << i << "," << p[i] << "\n";
         }
-        out << "\n";
+        return;
+    }
+    std::array<float, 256> r = getPDF(Channel::R);
+    std::array<float, 256> g = getPDF(Channel::G);
+    std::array<float, 256> b = getPDF(Channel::B);
+    out << "value,r,g,b\n";
+    for (int i = 0; i < 256; i++) {
+        out << i << "," << r[i] << "," << g[i] << "," << b[i] << "\n";
     }
 }
