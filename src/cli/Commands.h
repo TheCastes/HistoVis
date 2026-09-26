@@ -21,8 +21,23 @@ inline void printUsage(const char *prog) {
               << "Options:\n"
               << "  -o, --output <file>       Output file (default: stdout)\n"
               << "  -l, --luminance           Export luminance instead of the channels\n"
+              << "  -s, --space <ycbcr|lab>   Luminance space: Y of YCbCr or L* of Lab (default: ycbcr)\n"
               << "  -h, --help                Show this help message\n"
               << "\n";
+}
+
+inline bool parseSpace(const ArgParser &args, LuminanceSpace &space) {
+    std::string value = args.get("-s", "--space", "ycbcr");
+    if (value == "ycbcr") {
+        space = LuminanceSpace::YCbCr;
+        return true;
+    }
+    if (value == "lab") {
+        space = LuminanceSpace::Lab;
+        return true;
+    }
+    std::cerr << "Error: unknown space: " << value << " (expected ycbcr or lab)\n";
+    return false;
 }
 
 inline int cmdHist(const ArgParser &args) {
@@ -35,7 +50,11 @@ inline int cmdHist(const ArgParser &args) {
     if (!image.isValid()) {
         return 1;
     }
-    Histogram hist(image);
+    LuminanceSpace space;
+    if (!parseSpace(args, space)) {
+        return 1;
+    }
+    Histogram hist(image, space);
     bool luminance = args.has("-l", "--luminance");
     std::string output = args.get("-o", "--output");
     if (output.empty()) {
@@ -61,7 +80,11 @@ inline int cmdPdf(const ArgParser &args) {
     if (!image.isValid()) {
         return 1;
     }
-    Histogram hist(image);
+    LuminanceSpace space;
+    if (!parseSpace(args, space)) {
+        return 1;
+    }
+    Histogram hist(image, space);
     bool luminance = args.has("-l", "--luminance");
     std::string output = args.get("-o", "--output");
     if (output.empty()) {
@@ -87,8 +110,12 @@ inline int cmdCdf(const ArgParser &args) {
     if (!image.isValid()) {
         return 1;
     }
+    LuminanceSpace space;
+    if (!parseSpace(args, space)) {
+        return 1;
+    }
 
-    Histogram hist(image);
+    Histogram hist(image,space);
     bool luminance = args.has("-l", "--luminance");
     std::string output = args.get("-o", "--output");
     if (output.empty()) {

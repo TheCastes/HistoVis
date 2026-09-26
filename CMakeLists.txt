@@ -12,6 +12,8 @@ add_library(histovis_core STATIC
         src/core/StbImpl.cpp
         src/core/Histogram.h
         src/core/Histogram.cpp
+        src/core/ColorSpace.cpp
+        src/core/ColorSpace.h
 )
 target_include_directories(histovis_core
         PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/src

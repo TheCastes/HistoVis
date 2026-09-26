@@ -6,14 +6,18 @@
 #include "Image.h"
 
 enum class Channel { R, G, B, L };
+enum class LuminanceSpace { YCbCr, Lab };
 
 class Histogram {
 public:
-    Histogram(const Image &image);
+    Histogram(const Image &image, LuminanceSpace space = LuminanceSpace::YCbCr);
     ~Histogram() = default;
     const std::array<int, 256>& getHistogram(Channel channel) const;
     std::array<float, 256> getPDF(Channel channel) const;
     std::array<float, 256> getCDF(Channel channel) const;
+    LuminanceSpace getLuminanceSpace() const {
+        return space;
+    };
 
     bool isGreyscale() const {
         return greyscale;
@@ -31,4 +35,5 @@ private:
     std::array<std::array<int, 256>, 4> histogram{};
     int res = 0;
     bool greyscale = false;
+    LuminanceSpace space = LuminanceSpace::YCbCr;
 };

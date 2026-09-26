@@ -3,13 +3,16 @@
 #include <cmath>
 #include <iostream>
 
-Histogram::Histogram(const Image &image) {
+#include "ColorSpace.h"
+
+Histogram::Histogram(const Image &image, LuminanceSpace space) {
     if (!image.isValid()) {
         std::cerr << "Histogram: Error, invalid image\n";
         return;
     }
     greyscale = image.getChannels() < 3;
     res = image.getRes();
+    this->space = space;
     compute(image);
 }
 
@@ -20,7 +23,13 @@ void Histogram::compute(const Image &image) {
             histogram[index(Channel::R)][p.R]++;
             histogram[index(Channel::G)][p.G]++;
             histogram[index(Channel::B)][p.B]++;
-            histogram[index(Channel::L)][std::lround(0.2126 * p.R + 0.7152 * p.G + 0.0722 * p.B)]++; // Y with ITU-R BT.709 constants
+            int bin;
+            if (space == LuminanceSpace::Lab) {
+                bin = std::lround(ColorSpace::toLab(p).L * 255.0f / 100.0f);
+            } else {
+                bin = std::lround(ColorSpace::toYCbCr(p).Y);
+            }
+            histogram[index(Channel::L)][std::clamp(bin,0,255)]++;
         }
     }
 }
