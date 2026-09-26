@@ -11,6 +11,7 @@ enum class LuminanceSpace { YCbCr, Lab };
 class Histogram {
 public:
     Histogram(const Image &image, LuminanceSpace space = LuminanceSpace::YCbCr);
+    static int luminanceBin(const Pixel& p, LuminanceSpace space);
     ~Histogram() = default;
     const std::array<int, 256>& getHistogram(Channel channel) const;
     std::array<float, 256> getPDF(Channel channel) const;

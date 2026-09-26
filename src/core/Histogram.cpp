@@ -5,6 +5,8 @@
 
 #include "ColorSpace.h"
 
+
+
 Histogram::Histogram(const Image &image, LuminanceSpace space) {
     if (!image.isValid()) {
         std::cerr << "Histogram: Error, invalid image\n";
@@ -16,6 +18,16 @@ Histogram::Histogram(const Image &image, LuminanceSpace space) {
     compute(image);
 }
 
+int Histogram::luminanceBin(const Pixel &p, LuminanceSpace space) {
+    int bin;
+    if (space == LuminanceSpace::Lab) {
+        bin = std::lround(ColorSpace::toLab(p).L * 255.0f / 100.0f);
+    } else {
+        bin = std::lround(ColorSpace::toYCbCr(p).Y);
+    }
+    return std::clamp(bin,0,255);
+}
+
 void Histogram::compute(const Image &image) {
     for (int y = 0; y < image.getHeight(); y++) {
         for (int x = 0; x < image.getWidth(); x++) {
@@ -23,13 +35,7 @@ void Histogram::compute(const Image &image) {
             histogram[index(Channel::R)][p.R]++;
             histogram[index(Channel::G)][p.G]++;
             histogram[index(Channel::B)][p.B]++;
-            int bin;
-            if (space == LuminanceSpace::Lab) {
-                bin = std::lround(ColorSpace::toLab(p).L * 255.0f / 100.0f);
-            } else {
-                bin = std::lround(ColorSpace::toYCbCr(p).Y);
-            }
-            histogram[index(Channel::L)][std::clamp(bin,0,255)]++;
+            histogram[index(Channel::L)][luminanceBin(p, space)]++;
         }
     }
 }

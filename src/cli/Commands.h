@@ -5,6 +5,7 @@
 #include <string>
 
 #include "cli/ArgParser.h"
+#include "core/Equalization.h"
 #include "core/Histogram.h"
 #include "core/Image.h"
 
@@ -17,6 +18,7 @@ inline void printUsage(const char *prog) {
               << "  hist <input> [-o <file>] [-l]  Export the histogram as CSV\n"
               << "  pdf  <input> [-o <file>] [-l]  Export the PDF as CSV\n"
               << "  cdf  <input> [-o <file>] [-l]  Export the CDF as CSV\n"
+              << "  equalize <input> <output> [-s <space>]  Histogram equalization (output: .png, .jpg)\n"
               << "\n"
               << "Options:\n"
               << "  -o, --output <file>       Output file (default: stdout)\n"
@@ -128,5 +130,35 @@ inline int cmdCdf(const ArgParser &args) {
         return 1;
     }
     hist.exportCDF(file, luminance);
+    return 0;
+}
+
+inline int cmdEqualize(const ArgParser &args) {
+    const std::string &input = args.positional(0);
+    const std::string &output = args.positional(1);
+    if (input.empty() || output.empty()) {
+        std::cerr << "Error: equalize requires <input> and <output>\n";
+        return 1;
+    }
+    bool png = output.ends_with(".png");
+    bool jpg = output.ends_with(".jpg") || output.ends_with(".jpeg");
+    if (!png && !jpg) {
+        std::cerr << "Error: output must be .png, .jpg or .jpeg: " << output << "\n";
+        return 1;
+    }
+    LuminanceSpace space;
+    if (!parseSpace(args, space)) {
+        return 1;
+    }
+    Image image(input.c_str());
+    if (!image.isValid()) {
+        return 1;
+    }
+    equalize(image, space);
+    if (png) {
+        image.saveImagePNG(output.c_str());
+    } else {
+        image.saveImageJPG(output.c_str());
+    }
     return 0;
 }
