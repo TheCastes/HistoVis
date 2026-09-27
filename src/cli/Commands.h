@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -18,12 +19,14 @@ inline void printUsage(const char *prog) {
               << "  hist <input> [-o <file>] [-l]  Export the histogram as CSV\n"
               << "  pdf  <input> [-o <file>] [-l]  Export the PDF as CSV\n"
               << "  cdf  <input> [-o <file>] [-l]  Export the CDF as CSV\n"
-              << "  equalize <input> <output> [-s <space>]  Histogram equalization (output: .png, .jpg)\n"
+              << "  equalize <input> <output> [-m <mode>] [-w <n>] [-s <space>]  Histogram equalization (output: .png, .jpg)\n"
               << "\n"
               << "Options:\n"
               << "  -o, --output <file>       Output file (default: stdout)\n"
               << "  -l, --luminance           Export luminance instead of the channels\n"
               << "  -s, --space <ycbcr|lab>   Luminance space: Y of YCbCr or L* of Lab (default: ycbcr)\n"
+              << "  -m, --mode <global|local> Equalization mode (default: global)\n"
+              << "  -w, --window <n>          Window size in pixels for local mode, odd >= 3 (default: 1/8 of the shorter side)\n"
               << "  -h, --help                Show this help message\n"
               << "\n";
 }
@@ -150,11 +153,34 @@ inline int cmdEqualize(const ArgParser &args) {
     if (!parseSpace(args, space)) {
         return 1;
     }
+    std::string mode = args.get("-m", "--mode", "global");
+    if (mode != "global" && mode != "local") {
+        std::cerr << "Error: unknown mode: " << mode << " (expected global or local)\n";
+        return 1;
+    }
+    bool windowGiven = args.has("-w", "--window");
+    int window = args.getInt("-w", "--window", 0);
+    if (mode == "local" && windowGiven && (window < 3 || window % 2 == 0)) {
+        std::cerr << "Error: window must be an odd number >= 3\n";
+        return 1;
+    }
     Image image(input.c_str());
     if (!image.isValid()) {
         return 1;
     }
-    equalize(image, space);
+    if (mode == "local" && !windowGiven) {
+        window = std::min(image.getWidth(), image.getHeight()) / 8;
+        window = std::max(3, window | 1);
+    }
+    if (mode == "local" && window > std::min(image.getWidth(), image.getHeight())) {
+        std::cerr << "Error: window larger than the image (" << image.getWidth() << "x" << image.getHeight() << ")\n";
+        return 1;
+    }
+    if (mode == "local") {
+        equalizeLocal(image, window, space);
+    } else {
+        equalize(image, space);
+    }
     if (png) {
         image.saveImagePNG(output.c_str());
     } else {
