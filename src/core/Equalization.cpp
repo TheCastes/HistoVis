@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "ColorSpace.h"
+#include "LUT.h"
 
 namespace {
     std::vector<uint8_t> computeLuminanceBins(const Image& image, bool greyscale, LuminanceSpace space) {
@@ -48,39 +49,7 @@ void equalize(Image& image, LuminanceSpace space) {
     for (int i = 0; i < 256; i++) {
         T[i] = 255.0f * CDF[i];
     }
-    if (hist.isGreyscale()) {
-        for (int i = 0; i < image.getHeight(); i++) {
-            for (int j = 0; j < image.getWidth(); j++) {
-                Pixel pixel = image.getPixel(j, i);
-                pixel.R = std::lround(T[pixel.R]);
-                pixel.G = pixel.R;
-                pixel.B = pixel.R;
-                image.setPixel(j, i, pixel);
-            }
-        }
-    } else if (space == LuminanceSpace::YCbCr) {
-        for (int i = 0; i < image.getHeight(); i++) {
-            for (int j = 0; j < image.getWidth(); j++) {
-                Pixel pixel = image.getPixel(j, i);
-                ColorSpace::YCbCr ycbcrPixel = ColorSpace::toYCbCr(pixel);
-                ycbcrPixel.Y = T[Histogram::luminanceBin(pixel, space)];
-                Pixel newPixel = ColorSpace::fromYCbCr(ycbcrPixel);
-                newPixel.A = pixel.A;
-                image.setPixel(j, i, newPixel);
-            }
-        }
-    } else {
-        for (int i = 0; i < image.getHeight(); i++) {
-            for (int j = 0; j < image.getWidth(); j++) {
-                Pixel pixel = image.getPixel(j, i);
-                ColorSpace::Lab labPixel = ColorSpace::toLab(pixel);
-                labPixel.L = T[Histogram::luminanceBin(pixel, space)] * 100.0f/255.0f;
-                Pixel newPixel = ColorSpace::fromLab(labPixel);
-                newPixel.A = pixel.A;
-                image.setPixel(j, i, newPixel);
-            }
-        }
-    }
+    applyLUT(image, T, space);
 }
 
 void equalizeLocal(Image& image, int window, LuminanceSpace space) {

@@ -34,6 +34,9 @@ int main(int argc, char *argv[]) {
     if (command == "equalize") {
         return cmdEqualize(args);
     }
+    if (command == "match") {
+        return cmdMatch(args);
+    }
 
     std::cerr << "Error: unknown command: " << command << "\n";
     printUsage(argv[0]);

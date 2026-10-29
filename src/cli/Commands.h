@@ -9,6 +9,7 @@
 #include "core/Equalization.h"
 #include "core/Histogram.h"
 #include "core/Image.h"
+#include "core/Matching.h"
 
 inline void printUsage(const char *prog) {
     std::cout << "Usage: " << prog << " <command> [arguments] [options]\n"
@@ -20,9 +21,11 @@ inline void printUsage(const char *prog) {
               << "  pdf  <input> [-o <file>] [-l]  Export the PDF as CSV\n"
               << "  cdf  <input> [-o <file>] [-l]  Export the CDF as CSV\n"
               << "  equalize <input> <output> [-m <mode>] [-w <n>] [-s <space>]  Histogram equalization (output: .png, .jpg)\n"
+              << "  match <input> <output> -r <ref> [-s <space>]  Histogram matching against a reference image (output: .png, .jpg)\n"
               << "\n"
               << "Options:\n"
               << "  -o, --output <file>       Output file (default: stdout)\n"
+              << "  -r, --reference <file>    Reference image for match\n"
               << "  -l, --luminance           Export luminance instead of the channels\n"
               << "  -s, --space <ycbcr|lab>   Luminance space: Y of YCbCr or L* of Lab (default: ycbcr)\n"
               << "  -m, --mode <global|local> Equalization mode (default: global)\n"
@@ -181,6 +184,45 @@ inline int cmdEqualize(const ArgParser &args) {
     } else {
         equalize(image, space);
     }
+    if (png) {
+        image.saveImagePNG(output.c_str());
+    } else {
+        image.saveImageJPG(output.c_str());
+    }
+    return 0;
+}
+
+inline int cmdMatch(const ArgParser &args) {
+    const std::string &input = args.positional(0);
+    const std::string &output = args.positional(1);
+    if (input.empty() || output.empty()) {
+        std::cerr << "Error: match requires <input> and <output>\n";
+        return 1;
+    }
+    bool png = output.ends_with(".png");
+    bool jpg = output.ends_with(".jpg") || output.ends_with(".jpeg");
+    if (!png && !jpg) {
+        std::cerr << "Error: output must be .png, .jpg or .jpeg: " << output << "\n";
+        return 1;
+    }
+    std::string referencePath = args.get("-r", "--reference");
+    if (referencePath.empty()) {
+        std::cerr << "Error: match requires -r <reference>\n";
+        return 1;
+    }
+    LuminanceSpace space;
+    if (!parseSpace(args, space)) {
+        return 1;
+    }
+    Image image(input.c_str());
+    if (!image.isValid()) {
+        return 1;
+    }
+    Image reference(referencePath.c_str());
+    if (!reference.isValid()) {
+        return 1;
+    }
+    match(image, reference, space);
     if (png) {
         image.saveImagePNG(output.c_str());
     } else {

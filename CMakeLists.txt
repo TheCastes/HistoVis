@@ -16,6 +16,10 @@ add_library(histovis_core STATIC
         src/core/ColorSpace.h
         src/core/Equalization.cpp
         src/core/Equalization.h
+        src/core/LUT.h
+        src/core/LUT.cpp
+        src/core/Matching.h
+        src/core/Matching.cpp
 )
 target_include_directories(histovis_core
         PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/src
