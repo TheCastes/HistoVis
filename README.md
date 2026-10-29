@@ -4,6 +4,7 @@ Toolkit for histogram operations on images. It includes:
   - Visualizations of image histogram and CDF in RGB, YCbCr and Lab
   - Global and local histogram equalization
   - Histogram matching
+
 It can be used with a GUI (written with Qt), or as a CLI if you prefer.
 
 ## Download
