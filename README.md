@@ -5,9 +5,22 @@ Toolkit for histogram operations on images. It includes:
   - Global and local histogram equalization
   - Histogram matching
 It can be used with a GUI (written with Qt), or as a CLI if you prefer.
+
+## Download
+
+Prebuilt binaries are on the [Releases](https://github.com/TheCastes/HistoVis/releases) page.
+
+- **Windows**: unzip and run `histovis_gui.exe` or `histovis.exe`.
+- **Linux** (x64, Ubuntu 24.04+, Fedora 40+, Arch): the GUI needs Qt 6.4 or newer:
+  ```sh
+  sudo apt install libqt6widgets6 qt6-qpa-plugins   # Debian / Ubuntu
+  sudo dnf install qt6-qtbase-gui                    # Fedora
+  sudo pacman -S qt6-base                            # Arch
+  ```
+
 ## Build
 
-Requirements: CMake >= 3.21 and a C++20 compiler. The GUI also needs Qt 6.3 or newer (Widgets).
+Requirements: CMake >= 3.21 and a C++20 compiler. Thehe GUI needs Qt 6.4 or newer GUI also needs Qt 6.3 or newer (Widgets).
 Image loading and saving use [stb](https://github.com/nothings/stb).
 
 If you want to build only the CLI, turn HISTOVIS_BUILD_GUI flag in CMake as OFF.
