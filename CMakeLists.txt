@@ -1,9 +1,15 @@
-cmake_minimum_required(VERSION 4.3)
+cmake_minimum_required(VERSION 3.21)
 project(HistoVis LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+if (MSVC)
+    set(HISTOVIS_WARNINGS /W4 /utf-8)
+else ()
+    set(HISTOVIS_WARNINGS -Wall -Wextra -Wpedantic)
+endif ()
 
 option(HISTOVIS_BUILD_CLI "CLI" ON)
 option(HISTOVIS_BUILD_GUI "GUI" ON)
@@ -26,7 +32,7 @@ target_include_directories(histovis_core
         PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/src
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external
 )
-target_compile_options(histovis_core PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(histovis_core PRIVATE ${HISTOVIS_WARNINGS})
 set_source_files_properties(src/core/StbImpl.cpp PROPERTIES COMPILE_OPTIONS "-w")
 
 if (HISTOVIS_BUILD_CLI)
@@ -36,7 +42,7 @@ if (HISTOVIS_BUILD_CLI)
             src/cli/Commands.h
     )
     target_link_libraries(histovis PRIVATE histovis_core)
-    target_compile_options(histovis PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(histovis PRIVATE ${HISTOVIS_WARNINGS})
 endif ()
 
 if (HISTOVIS_BUILD_GUI)

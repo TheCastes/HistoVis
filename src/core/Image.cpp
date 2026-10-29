@@ -24,10 +24,10 @@ Image::~Image() {
     size = 0;
 }
 
-void Image::saveImageJPG(const char *fileName) const {
-    stbi_write_jpg(fileName, width, height, channels, data, 100);
+bool Image::saveImageJPG(const char *fileName) const {
+    return stbi_write_jpg(fileName, width, height, channels, data, 100) != 0;
 }
 
-void Image::saveImagePNG(const char *fileName) const {
-    stbi_write_png(fileName, width, height, channels, data, width * channels);
+bool Image::saveImagePNG(const char *fileName) const {
+    return stbi_write_png(fileName, width, height, channels, data, width * channels) != 0;
 }
