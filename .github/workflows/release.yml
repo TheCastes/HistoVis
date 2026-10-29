@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      QT_VERSION: "6.8.3"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+          cmake --build build --config Release
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item build\Release\histovis.exe dist\
+          Copy-Item build\src\gui\Release\histovis_gui.exe dist\
+          windeployqt --release --no-translations dist\histovis_gui.exe
+          # Visual C++ runtime next to the executables, so nothing has to be installed
+          Copy-Item C:\Windows\System32\msvcp140.dll, C:\Windows\System32\vcruntime140.dll, C:\Windows\System32\vcruntime140_1.dll dist\
+          Copy-Item LICENSE, README.md dist\
+          Invoke-WebRequest https://www.gnu.org/licenses/lgpl-3.0.txt -OutFile dist\LICENSE.LGPL3.txt
+          Invoke-WebRequest https://www.gnu.org/licenses/gpl-3.0.txt -OutFile dist\LICENSE.GPL3.txt
+          $qtMinor = ($env:QT_VERSION -split '\.')[0..1] -join '.'
+          @"
+          HistoVis uses the following third-party software.
+
+          Qt $env:QT_VERSION - https://www.qt.io
+            Licensed under the GNU Lesser General Public License v3 (LICENSE.LGPL3.txt, LICENSE.GPL3.txt).
+            Qt is unmodified and dynamically linked: the Qt DLLs can be replaced with another build.
+            Source code: https://download.qt.io/archive/qt/$qtMinor/$env:QT_VERSION/single/
+
+          stb - https://github.com/nothings/stb
+            Public domain (Unlicense) or MIT.
+
+          Microsoft Visual C++ runtime (msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll)
+            Redistributed under the Microsoft Visual Studio license terms.
+          "@ | Out-File -Encoding utf8 dist\THIRD_PARTY_NOTICES.txt
+          Compress-Archive dist\* "HistoVis-${{ github.ref_name }}-windows-x64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HistoVis-windows-x64
+          path: HistoVis-*-windows-x64.zip
+
+  linux:
+    # system Qt 6.4: the binaries run with any Qt >= 6.4 and glibc >= 2.39
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev libgl1-mesa-dev
+
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Package
+        run: |
+          name="HistoVis-${{ github.ref_name }}-linux-x64"
+          mkdir "$name"
+          cp build/histovis build/src/gui/histovis_gui LICENSE README.md "$name"/
+          strip "$name"/histovis "$name"/histovis_gui
+          tar -czf "$name.tar.gz" "$name"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HistoVis-linux-x64
+          path: HistoVis-*-linux-x64.tar.gz
+
+  release:
+    # one job publishes both files, so the two builds don't race to create the release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            HistoVis-*-windows-x64.zip
+            HistoVis-*-linux-x64.tar.gz
+          generate_release_notes: true
