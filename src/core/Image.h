@@ -59,6 +59,10 @@ class Image {
         return width * height;
     }
 
+    const uint8_t *getData() const {
+        return data;
+    }
+
     Pixel getPixel(int x, int y) const {
         Pixel p;
         size_t index = (y * width + x) * channels;
@@ -87,8 +91,8 @@ class Image {
         }
     }
 
-    void saveImageJPG(const char *fileName) const;
-    void saveImagePNG(const char *fileName) const;
+    bool saveImageJPG(const char *fileName) const;
+    bool saveImagePNG(const char *fileName) const;
 
     void toGreyScale() const {
         for (int y = 0; y < height; y++) {

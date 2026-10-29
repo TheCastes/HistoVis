@@ -17,17 +17,18 @@ inline void printUsage(const char *prog) {
               << "Histogram toolkit for images.\n"
               << "\n"
               << "Commands:\n"
-              << "  hist <input> [-o <file>] [-l]  Export the histogram as CSV\n"
-              << "  pdf  <input> [-o <file>] [-l]  Export the PDF as CSV\n"
-              << "  cdf  <input> [-o <file>] [-l]  Export the CDF as CSV\n"
+              << "  hist <input> [-o <file>] [-s <space>] [-l]  Export the histogram as CSV\n"
+              << "  pdf  <input> [-o <file>] [-s <space>] [-l]  Export the PDF as CSV\n"
+              << "  cdf  <input> [-o <file>] [-s <space>] [-l]  Export the CDF as CSV\n"
               << "  equalize <input> <output> [-m <mode>] [-w <n>] [-s <space>]  Histogram equalization (output: .png, .jpg)\n"
               << "  match <input> <output> -r <ref> [-s <space>]  Histogram matching against a reference image (output: .png, .jpg)\n"
               << "\n"
               << "Options:\n"
               << "  -o, --output <file>       Output file (default: stdout)\n"
               << "  -r, --reference <file>    Reference image for match\n"
-              << "  -l, --luminance           Export luminance instead of the channels\n"
-              << "  -s, --space <ycbcr|lab>   Luminance space: Y of YCbCr or L* of Lab (default: ycbcr)\n"
+              << "  -l, --luminance           Export only the luminance: Y of YCbCr, or L* with -s lab\n"
+              << "  -s, --space <space>       hist/pdf/cdf: channels to export, rgb|ycbcr|lab (default: rgb)\n"
+              << "                            equalize/match: luminance space, ycbcr|lab (default: ycbcr)\n"
               << "  -m, --mode <global|local> Equalization mode (default: global)\n"
               << "  -w, --window <n>          Window size in pixels for local mode, odd >= 3 (default: 1/8 of the shorter side)\n"
               << "  -h, --help                Show this help message\n"
@@ -48,6 +49,28 @@ inline bool parseSpace(const ArgParser &args, LuminanceSpace &space) {
     return false;
 }
 
+inline bool parseExport(const ArgParser &args, LuminanceSpace &space, ExportChannels &channels) {
+    std::string value = args.get("-s", "--space", "rgb");
+    bool luminance = args.has("-l", "--luminance");
+    if (value == "rgb") {
+        space = LuminanceSpace::YCbCr;
+        channels = luminance ? ExportChannels::Luminance : ExportChannels::RGB;
+        return true;
+    }
+    if (value == "ycbcr") {
+        space = LuminanceSpace::YCbCr;
+        channels = luminance ? ExportChannels::Luminance : ExportChannels::Space;
+        return true;
+    }
+    if (value == "lab") {
+        space = LuminanceSpace::Lab;
+        channels = luminance ? ExportChannels::Luminance : ExportChannels::Space;
+        return true;
+    }
+    std::cerr << "Error: unknown space: " << value << " (expected rgb, ycbcr or lab)\n";
+    return false;
+}
+
 inline int cmdHist(const ArgParser &args) {
     const std::string &input = args.positional(0);
     if (input.empty()) {
@@ -59,14 +82,14 @@ inline int cmdHist(const ArgParser &args) {
         return 1;
     }
     LuminanceSpace space;
-    if (!parseSpace(args, space)) {
+    ExportChannels channels;
+    if (!parseExport(args, space, channels)) {
         return 1;
     }
     Histogram hist(image, space);
-    bool luminance = args.has("-l", "--luminance");
     std::string output = args.get("-o", "--output");
     if (output.empty()) {
-        hist.exportHistogram(std::cout, luminance);
+        hist.exportHistogram(std::cout, channels);
         return 0;
     }
     std::ofstream file(output);
@@ -74,7 +97,7 @@ inline int cmdHist(const ArgParser &args) {
         std::cerr << "Error: cannot open output file: " << output << "\n";
         return 1;
     }
-    hist.exportHistogram(file, luminance);
+    hist.exportHistogram(file, channels);
     return 0;
 }
 
@@ -89,14 +112,14 @@ inline int cmdPdf(const ArgParser &args) {
         return 1;
     }
     LuminanceSpace space;
-    if (!parseSpace(args, space)) {
+    ExportChannels channels;
+    if (!parseExport(args, space, channels)) {
         return 1;
     }
     Histogram hist(image, space);
-    bool luminance = args.has("-l", "--luminance");
     std::string output = args.get("-o", "--output");
     if (output.empty()) {
-        hist.exportPDF(std::cout, luminance);
+        hist.exportPDF(std::cout, channels);
         return 0;
     }
     std::ofstream file(output);
@@ -104,7 +127,7 @@ inline int cmdPdf(const ArgParser &args) {
         std::cerr << "Error: cannot open output file: " << output << "\n";
         return 1;
     }
-    hist.exportPDF(file, luminance);
+    hist.exportPDF(file, channels);
     return 0;
 }
 
@@ -119,15 +142,14 @@ inline int cmdCdf(const ArgParser &args) {
         return 1;
     }
     LuminanceSpace space;
-    if (!parseSpace(args, space)) {
+    ExportChannels channels;
+    if (!parseExport(args, space, channels)) {
         return 1;
     }
-
-    Histogram hist(image,space);
-    bool luminance = args.has("-l", "--luminance");
+    Histogram hist(image, space);
     std::string output = args.get("-o", "--output");
     if (output.empty()) {
-        hist.exportCDF(std::cout, luminance);
+        hist.exportCDF(std::cout, channels);
         return 0;
     }
     std::ofstream file(output);
@@ -135,7 +157,7 @@ inline int cmdCdf(const ArgParser &args) {
         std::cerr << "Error: cannot open output file: " << output << "\n";
         return 1;
     }
-    hist.exportCDF(file, luminance);
+    hist.exportCDF(file, channels);
     return 0;
 }
 
@@ -184,10 +206,10 @@ inline int cmdEqualize(const ArgParser &args) {
     } else {
         equalize(image, space);
     }
-    if (png) {
-        image.saveImagePNG(output.c_str());
-    } else {
-        image.saveImageJPG(output.c_str());
+    bool saved = png ? image.saveImagePNG(output.c_str()) : image.saveImageJPG(output.c_str());
+    if (!saved) {
+        std::cerr << "Error: cannot write output file: " << output << "\n";
+        return 1;
     }
     return 0;
 }
@@ -223,10 +245,10 @@ inline int cmdMatch(const ArgParser &args) {
         return 1;
     }
     match(image, reference, space);
-    if (png) {
-        image.saveImagePNG(output.c_str());
-    } else {
-        image.saveImageJPG(output.c_str());
+    bool saved = png ? image.saveImagePNG(output.c_str()) : image.saveImageJPG(output.c_str());
+    if (!saved) {
+        std::cerr << "Error: cannot write output file: " << output << "\n";
+        return 1;
     }
     return 0;
 }

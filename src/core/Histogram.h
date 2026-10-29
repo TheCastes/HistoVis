@@ -2,16 +2,19 @@
 
 #include <array>
 #include <iostream>
+#include <string>
 
 #include "Image.h"
 
-enum class Channel { R, G, B, L };
+enum class Channel { R, G, B, L, C1, C2 };
 enum class LuminanceSpace { YCbCr, Lab };
+enum class ExportChannels { RGB, Space, Luminance };
 
 class Histogram {
 public:
     Histogram(const Image &image, LuminanceSpace space = LuminanceSpace::YCbCr);
     static int luminanceBin(const Pixel& p, LuminanceSpace space);
+    static std::array<int, 3> spaceBins(const Pixel& p, LuminanceSpace space);
     ~Histogram() = default;
     const std::array<int, 256>& getHistogram(Channel channel) const;
     std::array<float, 256> getPDF(Channel channel) const;
@@ -23,17 +26,18 @@ public:
     bool isGreyscale() const {
         return greyscale;
     }
-    void exportHistogram(std::ostream &out = std::cout, bool luminance = false) const;
-    void exportPDF(std::ostream &out = std::cout, bool luminance = false) const;
-    void exportCDF(std::ostream &out = std::cout, bool luminance = false) const;
+    void exportHistogram(std::ostream &out = std::cout, ExportChannels channels = ExportChannels::RGB) const;
+    void exportPDF(std::ostream &out = std::cout, ExportChannels channels = ExportChannels::RGB) const;
+    void exportCDF(std::ostream &out = std::cout, ExportChannels channels = ExportChannels::RGB) const;
 
 private:
     void compute(const Image &image);
     static size_t index(Channel channel) {
         return static_cast<size_t>(channel);
     }
+    std::string columnNames(ExportChannels channels) const;
 
-    std::array<std::array<int, 256>, 4> histogram{};
+    std::array<std::array<int, 256>, 6> histogram{};
     int res = 0;
     bool greyscale = false;
     LuminanceSpace space = LuminanceSpace::YCbCr;

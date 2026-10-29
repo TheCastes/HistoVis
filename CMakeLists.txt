@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(HISTOVIS_BUILD_CLI "CLI" ON)
+option(HISTOVIS_BUILD_GUI "GUI" ON)
 add_library(histovis_core STATIC
         src/core/Image.h
         src/core/Image.cpp
@@ -36,4 +37,8 @@ if (HISTOVIS_BUILD_CLI)
     )
     target_link_libraries(histovis PRIVATE histovis_core)
     target_compile_options(histovis PRIVATE -Wall -Wextra -Wpedantic)
+endif ()
+
+if (HISTOVIS_BUILD_GUI)
+    add_subdirectory(src/gui)
 endif ()

@@ -19,23 +19,39 @@ Histogram::Histogram(const Image &image, LuminanceSpace space) {
 }
 
 int Histogram::luminanceBin(const Pixel &p, LuminanceSpace space) {
-    int bin;
+    return spaceBins(p, space)[0];
+}
+
+std::array<int, 3> Histogram::spaceBins(const Pixel &p, LuminanceSpace space) {
+    std::array<int, 3> bins{};
     if (space == LuminanceSpace::Lab) {
-        bin = std::lround(ColorSpace::toLab(p).L * 255.0f / 100.0f);
+        ColorSpace::Lab lab = ColorSpace::toLab(p);
+        bins[0] = std::lround(lab.L * 255.0f / 100.0f);
+        bins[1] = std::lround(lab.a + 128.0f);
+        bins[2] = std::lround(lab.b + 128.0f);
     } else {
-        bin = std::lround(ColorSpace::toYCbCr(p).Y);
+        ColorSpace::YCbCr ycbcr = ColorSpace::toYCbCr(p);
+        bins[0] = std::lround(ycbcr.Y);
+        bins[1] = std::lround(ycbcr.Cb + 128.0f);
+        bins[2] = std::lround(ycbcr.Cr + 128.0f);
     }
-    return std::clamp(bin,0,255);
+    for (int i = 0; i < 3; i++) {
+        bins[i] = std::clamp(bins[i], 0, 255);
+    }
+    return bins;
 }
 
 void Histogram::compute(const Image &image) {
     for (int y = 0; y < image.getHeight(); y++) {
         for (int x = 0; x < image.getWidth(); x++) {
             Pixel p = image.getPixel(x, y);
+            std::array<int, 3> bins = spaceBins(p, space);
             histogram[index(Channel::R)][p.R]++;
             histogram[index(Channel::G)][p.G]++;
             histogram[index(Channel::B)][p.B]++;
-            histogram[index(Channel::L)][luminanceBin(p, space)]++;
+            histogram[index(Channel::L)][bins[0]]++;
+            histogram[index(Channel::C1)][bins[1]]++;
+            histogram[index(Channel::C2)][bins[2]]++;
         }
     }
 }
@@ -68,58 +84,69 @@ std::array<float, 256> Histogram::getCDF(Channel channel) const {
     return cdf;
 }
 
+std::string Histogram::columnNames(ExportChannels channels) const {
+    if (channels == ExportChannels::RGB) {
+        return "r,g,b";
+    }
+    if (space == LuminanceSpace::Lab) {
+        return "l,a,b";
+    }
+    return "y,cb,cr";
+}
 
-
-void Histogram::exportHistogram(std::ostream &out, bool luminance) const {
-    if (luminance || greyscale) {
-        const std::array<int, 256> &h = histogram[index(luminance ? Channel::L : Channel::R)];
+void Histogram::exportHistogram(std::ostream &out, ExportChannels channels) const {
+    if (channels == ExportChannels::Luminance || greyscale) {
+        const std::array<int, 256> &h = histogram[index(channels == ExportChannels::Luminance ? Channel::L : Channel::R)];
         out << "value,count\n";
         for (int i = 0; i < 256; i++) {
             out << i << "," << h[i] << "\n";
         }
         return;
     }
-    const std::array<int, 256> &r = histogram[index(Channel::R)];
-    const std::array<int, 256> &g = histogram[index(Channel::G)];
-    const std::array<int, 256> &b = histogram[index(Channel::B)];
-    out << "value,r,g,b\n";
+    bool rgb = channels == ExportChannels::RGB;
+    const std::array<int, 256> &c1 = histogram[index(rgb ? Channel::R : Channel::L)];
+    const std::array<int, 256> &c2 = histogram[index(rgb ? Channel::G : Channel::C1)];
+    const std::array<int, 256> &c3 = histogram[index(rgb ? Channel::B : Channel::C2)];
+    out << "value," << columnNames(channels) << "\n";
     for (int i = 0; i < 256; i++) {
-        out << i << "," << r[i] << "," << g[i] << "," << b[i] << "\n";
+        out << i << "," << c1[i] << "," << c2[i] << "," << c3[i] << "\n";
     }
 }
 
-void Histogram::exportPDF(std::ostream &out, bool luminance) const {
-    if (luminance || greyscale) {
-        std::array<float, 256> p = getPDF(luminance ? Channel::L : Channel::R);
+void Histogram::exportPDF(std::ostream &out, ExportChannels channels) const {
+    if (channels == ExportChannels::Luminance || greyscale) {
+        std::array<float, 256> p = getPDF(channels == ExportChannels::Luminance ? Channel::L : Channel::R);
         out << "value,probability\n";
         for (int i = 0; i < 256; i++) {
             out << i << "," << p[i] << "\n";
         }
         return;
     }
-    std::array<float, 256> r = getPDF(Channel::R);
-    std::array<float, 256> g = getPDF(Channel::G);
-    std::array<float, 256> b = getPDF(Channel::B);
-    out << "value,rprob,gprob,bprob\n";
+    bool rgb = channels == ExportChannels::RGB;
+    std::array<float, 256> c1 = getPDF(rgb ? Channel::R : Channel::L);
+    std::array<float, 256> c2 = getPDF(rgb ? Channel::G : Channel::C1);
+    std::array<float, 256> c3 = getPDF(rgb ? Channel::B : Channel::C2);
+    out << "value," << columnNames(channels) << "\n";
     for (int i = 0; i < 256; i++) {
-        out << i << "," << r[i] << "," << g[i] << "," << b[i] << "\n";
+        out << i << "," << c1[i] << "," << c2[i] << "," << c3[i] << "\n";
     }
 }
 
-void Histogram::exportCDF(std::ostream &out, bool luminance) const {
-    if (luminance || greyscale) {
-        std::array<float, 256> p = getCDF(luminance ? Channel::L : Channel::R);
+void Histogram::exportCDF(std::ostream &out, ExportChannels channels) const {
+    if (channels == ExportChannels::Luminance || greyscale) {
+        std::array<float, 256> p = getCDF(channels == ExportChannels::Luminance ? Channel::L : Channel::R);
         out << "value,cumulative\n";
         for (int i = 0; i < 256; i++) {
             out << i << "," << p[i] << "\n";
         }
         return;
     }
-    std::array<float, 256> r = getCDF(Channel::R);
-    std::array<float, 256> g = getCDF(Channel::G);
-    std::array<float, 256> b = getCDF(Channel::B);
-    out << "value,rprob,gprob,bprob\n";
+    bool rgb = channels == ExportChannels::RGB;
+    std::array<float, 256> c1 = getCDF(rgb ? Channel::R : Channel::L);
+    std::array<float, 256> c2 = getCDF(rgb ? Channel::G : Channel::C1);
+    std::array<float, 256> c3 = getCDF(rgb ? Channel::B : Channel::C2);
+    out << "value," << columnNames(channels) << "\n";
     for (int i = 0; i < 256; i++) {
-        out << i << "," << r[i] << "," << g[i] << "," << b[i] << "\n";
+        out << i << "," << c1[i] << "," << c2[i] << "," << c3[i] << "\n";
     }
 }
