@@ -50,3 +50,8 @@ endif ()
 if (HISTOVIS_BUILD_GUI)
     add_subdirectory(src/gui)
 endif ()
+
+if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt)
+    enable_testing()
+    add_subdirectory(tests)
+endif ()

@@ -1,5 +1,7 @@
 #include "core/Image.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 #include "stb_image.h"
@@ -11,6 +13,26 @@ Image::Image(const char *fileName) {
     } else {
         std::cerr << "Error loading image: " << fileName << "\n";
     }
+}
+
+Image::Image(int width, int height, int channels) {
+    if (width <= 0 || height <= 0 || channels < 1 || channels > 4) {
+        std::cerr << "Error: invalid image size " << width << "x" << height << "x" << channels << "\n";
+        return;
+    }
+    this->width = width;
+    this->height = height;
+    this->channels = channels;
+    size = static_cast<size_t>(width) * height * channels;
+    data = static_cast<uint8_t *>(std::calloc(size, 1));
+}
+
+std::unique_ptr<Image> Image::clone() const {
+    std::unique_ptr<Image> copy = std::make_unique<Image>(width, height, channels);
+    if (copy->data != nullptr && data != nullptr) {
+        std::memcpy(copy->data, data, size);
+    }
+    return copy;
 }
 
 Image::~Image() {

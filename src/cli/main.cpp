@@ -31,6 +31,9 @@ int main(int argc, char *argv[]) {
     if (command == "cdf") {
         return cmdCdf(args);
     }
+    if (command == "stats") {
+        return cmdStats(args);
+    }
     if (command == "equalize") {
         return cmdEqualize(args);
     }

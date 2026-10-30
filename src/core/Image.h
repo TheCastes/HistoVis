@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 class Pixel {
 public:
@@ -35,7 +36,12 @@ class Image {
     public:
 
     explicit Image(const char *fileName);
+    //black image in memory, channels from 1 to 4
+    Image(int width, int height, int channels);
     ~Image();
+
+    //explicit deep copy, the copy constructor stays deleted to avoid copying by mistake
+    std::unique_ptr<Image> clone() const;
 
     Image(const Image &) = delete;
     Image &operator=(const Image &) = delete;

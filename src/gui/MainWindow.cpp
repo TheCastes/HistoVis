@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QFontMetrics>
 #include <QFormLayout>
+#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QImage>
@@ -72,11 +73,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     saveAction->setEnabled(false);
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveImage);
 
-    revertAction = new QAction(QIcon::fromTheme("document-revert"), "&Revert", this);
-    revertAction->setShortcut(QKeySequence("Ctrl+Z"));
-    revertAction->setEnabled(false);
-    connect(revertAction, &QAction::triggered, this, &MainWindow::revertImage);
-
     QAction *quitAction = new QAction(QIcon::fromTheme("application-exit"), "&Quit", this);
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &MainWindow::close);
@@ -84,9 +80,38 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QMenu *fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(openAction);
     fileMenu->addAction(saveAction);
-    fileMenu->addAction(revertAction);
     fileMenu->addSeparator();
     fileMenu->addAction(quitAction);
+
+    undoAction = new QAction(QIcon::fromTheme("edit-undo"), "&Undo", this);
+    undoAction->setShortcut(QKeySequence::Undo);
+    undoAction->setEnabled(false);
+    connect(undoAction, &QAction::triggered, this, &MainWindow::undo);
+
+    redoAction = new QAction(QIcon::fromTheme("edit-redo"), "&Redo", this);
+    redoAction->setShortcuts({QKeySequence("Ctrl+Y"), QKeySequence("Ctrl+Shift+Z")});
+    redoAction->setEnabled(false);
+    connect(redoAction, &QAction::triggered, this, &MainWindow::redo);
+
+    resetAction = new QAction(QIcon::fromTheme("document-revert"), "Re&set", this);
+    resetAction->setShortcut(QKeySequence("Ctrl+R"));
+    resetAction->setEnabled(false);
+    connect(resetAction, &QAction::triggered, this, &MainWindow::resetImage);
+
+    QMenu *editMenu = menuBar()->addMenu("&Edit");
+    editMenu->addAction(undoAction);
+    editMenu->addAction(redoAction);
+    editMenu->addSeparator();
+    editMenu->addAction(resetAction);
+
+    statsAction = new QAction("&Statistics", this);
+    statsAction->setCheckable(true);
+    connect(statsAction, &QAction::toggled, this, [this](bool checked) {
+        statsTable->setVisible(checked);
+    });
+
+    QMenu *viewMenu = menuBar()->addMenu("&View");
+    viewMenu->addAction(statsAction);
 
     QAction *equalizeGlobalAction = new QAction("Equalize (&global)...", this);
     connect(equalizeGlobalAction, &QAction::triggered, this, &MainWindow::equalizeGlobal);
@@ -112,7 +137,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     toolBar->addAction(openAction);
     toolBar->addAction(saveAction);
-    toolBar->addAction(revertAction);
+    toolBar->addSeparator();
+    toolBar->addAction(undoAction);
+    toolBar->addAction(redoAction);
     toolBar->addSeparator();
 
     spaceBox = new QComboBox;
@@ -145,6 +172,24 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     plotsLayout->addWidget(histogramPlot);
     plotsLayout->addWidget(cdfPlot);
 
+    statsTable = new QTableWidget(9, 0);
+    statsTable->setVerticalHeaderLabels({"Min", "Max", "Range (min–max)", "Range (P1–P99)", "Mean", "Median",
+                                         "Mode", "Std dev", "IQR (P25–P75)"});
+    statsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    statsTable->setSelectionMode(QAbstractItemView::NoSelection);
+    statsTable->setFocusPolicy(Qt::NoFocus);
+    statsTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    statsTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    statsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    int rowHeight = statsTable->fontMetrics().height() + 6;
+    statsTable->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    statsTable->verticalHeader()->setDefaultSectionSize(rowHeight);
+    statsTable->setFixedHeight(statsTable->horizontalHeader()->sizeHint().height() + 9 * rowHeight +
+                               2 * statsTable->frameWidth());
+    statsTable->setToolTip("Values in bin scale 0-255: Cb, Cr, a*, b* are neutral at 128, L* 255 is L* 100");
+    statsTable->setVisible(false);
+    plotsLayout->addWidget(statsTable);
+
     QWidget *central = new QWidget;
     QHBoxLayout *layout = new QHBoxLayout(central);
     layout->addWidget(imageLabel, 2);
@@ -175,11 +220,14 @@ void MainWindow::loadImage(const QString &path) {
         return;
     }
     image = std::move(loaded);
+    original = image->clone();
+    undoStack.clear();
+    redoStack.clear();
+    historyTrimmed = false;
     imagePath = path;
-    setWindowTitle("HistoVis - " + QFileInfo(path).fileName());
     saveAction->setEnabled(true);
-    revertAction->setEnabled(true);
     toolsMenu->setEnabled(true);
+    updateHistory();
     refreshImage();
 }
 
@@ -208,8 +256,63 @@ void MainWindow::saveImage() {
     }
 }
 
-void MainWindow::revertImage() {
-    loadImage(imagePath);
+void MainWindow::resetImage() {
+    QMessageBox::StandardButton answer = QMessageBox::warning(
+        this, "Reset", "Go back to the original image?\nThe undo history will be lost.",
+        QMessageBox::Reset | QMessageBox::Cancel, QMessageBox::Cancel);
+    if (answer != QMessageBox::Reset) {
+        return;
+    }
+    image = original->clone();
+    undoStack.clear();
+    redoStack.clear();
+    historyTrimmed = false;
+    updateHistory();
+    refreshImage();
+}
+
+void MainWindow::undo() {
+    if (undoStack.empty()) {
+        return;
+    }
+    redoStack.push_back(std::move(image));
+    image = std::move(undoStack.back());
+    undoStack.pop_back();
+    updateHistory();
+    refreshImage();
+}
+
+void MainWindow::redo() {
+    if (redoStack.empty()) {
+        return;
+    }
+    undoStack.push_back(std::move(image));
+    image = std::move(redoStack.back());
+    redoStack.pop_back();
+    updateHistory();
+    refreshImage();
+}
+
+void MainWindow::pushUndo() {
+    const size_t maxUndo = 10;
+    undoStack.push_back(image->clone());
+    if (undoStack.size() > maxUndo) {
+        undoStack.erase(undoStack.begin());
+        historyTrimmed = true;
+    }
+    redoStack.clear();
+}
+
+void MainWindow::updateHistory() {
+    bool modified = !undoStack.empty() || historyTrimmed;
+    undoAction->setEnabled(!undoStack.empty());
+    redoAction->setEnabled(!redoStack.empty());
+    resetAction->setEnabled(modified || !redoStack.empty());
+    QString title = "HistoVis - " + QFileInfo(imagePath).fileName();
+    if (modified) {
+        title += " (modified)";
+    }
+    setWindowTitle(title);
 }
 
 void MainWindow::equalizeGlobal() {
@@ -228,10 +331,11 @@ void MainWindow::equalizeGlobal() {
     }
 
     LuminanceSpace space = spaceChoice->currentIndex() == 1 ? LuminanceSpace::Lab : LuminanceSpace::YCbCr;
+    pushUndo();
     QApplication::setOverrideCursor(Qt::WaitCursor);
     equalize(*image, space);
     QApplication::restoreOverrideCursor();
-    setWindowTitle("HistoVis - " + QFileInfo(imagePath).fileName() + " (modified)");
+    updateHistory();
     refreshImage();
 }
 
@@ -266,10 +370,11 @@ void MainWindow::equalizeLocal() {
 
     LuminanceSpace space = spaceChoice->currentIndex() == 1 ? LuminanceSpace::Lab : LuminanceSpace::YCbCr;
     int window = windowChoice->value() | 1;
+    pushUndo();
     QApplication::setOverrideCursor(Qt::WaitCursor);
     ::equalizeLocal(*image, window, space);
     QApplication::restoreOverrideCursor();
-    setWindowTitle("HistoVis - " + QFileInfo(imagePath).fileName() + " (modified)");
+    updateHistory();
     refreshImage();
 }
 
@@ -318,10 +423,11 @@ void MainWindow::clahe() {
     LuminanceSpace space = spaceChoice->currentIndex() == 1 ? LuminanceSpace::Lab : LuminanceSpace::YCbCr;
     int window = windowChoice->value() | 1;
     float clip = static_cast<float>(clipChoice->value());
+    pushUndo();
     QApplication::setOverrideCursor(Qt::WaitCursor);
     ::equalizeLocal(*image, window, space, clip);
     QApplication::restoreOverrideCursor();
-    setWindowTitle("HistoVis - " + QFileInfo(imagePath).fileName() + " (modified)");
+    updateHistory();
     refreshImage();
 }
 
@@ -405,10 +511,11 @@ void MainWindow::matchImage() {
     }
 
     LuminanceSpace space = spaceChoice->currentIndex() == 1 ? LuminanceSpace::Lab : LuminanceSpace::YCbCr;
+    pushUndo();
     QApplication::setOverrideCursor(Qt::WaitCursor);
     match(*image, *reference, space);
     QApplication::restoreOverrideCursor();
-    setWindowTitle("HistoVis - " + QFileInfo(imagePath).fileName() + " (modified)");
+    updateHistory();
     refreshImage();
 }
 
@@ -535,6 +642,7 @@ void MainWindow::computeHistogram() {
 void MainWindow::updatePlots() {
     histogramPlot->clear();
     cdfPlot->clear();
+    statsTable->setColumnCount(0);
     if (!histogram) {
         return;
     }
@@ -552,7 +660,24 @@ void MainWindow::updatePlots() {
     for (int i = 0; i < 3; i++) {
         if (index == i || index == 3) {
             addChannelPlots(channels[i], colors[i]);
+            addStatisticsColumn(channels[i], plotBox->itemText(i));
         }
+    }
+}
+
+void MainWindow::addStatisticsColumn(Channel channel, const QString &name) {
+    Statistics s = histogram->getStatistics(channel);
+    int column = statsTable->columnCount();
+    statsTable->insertColumn(column);
+    statsTable->setHorizontalHeaderItem(column, new QTableWidgetItem(name));
+    QStringList values = {QString::number(s.min), QString::number(s.max), QString::number(s.range),
+                          QString::number(s.percentileRange), QString::number(s.mean, 'f', 2),
+                          QString::number(s.median), QString::number(s.mode),
+                          QString::number(s.stdDev, 'f', 2), QString::number(s.iqr)};
+    for (int row = 0; row < values.size(); row++) {
+        QTableWidgetItem *item = new QTableWidgetItem(values[row]);
+        item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        statsTable->setItem(row, column, item);
     }
 }
 

@@ -1,6 +1,7 @@
 #include "Histogram.h"
 
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 
 #include "ColorSpace.h"
@@ -84,6 +85,59 @@ std::array<float, 256> Histogram::getCDF(Channel channel) const {
     return cdf;
 }
 
+Statistics Histogram::getStatistics(Channel channel) const {
+    Statistics stats;
+    if (res == 0) {
+        return stats;
+    }
+    const std::array<int, 256> &h = histogram[index(channel)];
+
+    stats.min = 0;
+    while (h[stats.min] == 0) {
+        stats.min++;
+    }
+    stats.max = 255;
+    while (h[stats.max] == 0) {
+        stats.max--;
+    }
+    stats.range = stats.max - stats.min;
+
+    double sum = 0;
+    for (int i = 0; i < 256; i++) {
+        sum += static_cast<double>(i) * h[i];
+        if (h[i] > h[stats.mode]) {
+            stats.mode = i;
+        }
+    }
+    stats.mean = sum / res;
+    double squares = 0;
+    for (int i = 0; i < 256; i++) {
+        squares += (i - stats.mean) * (i - stats.mean) * h[i];
+    }
+    stats.stdDev = std::sqrt(squares / res);
+
+    stats.p1 = percentile(h, 0.01);
+    stats.p25 = percentile(h, 0.25);
+    stats.median = percentile(h, 0.5);
+    stats.p75 = percentile(h, 0.75);
+    stats.p99 = percentile(h, 0.99);
+    stats.percentileRange = stats.p99 - stats.p1;
+    stats.iqr = stats.p75 - stats.p25;
+    return stats;
+}
+
+int Histogram::percentile(const std::array<int, 256> &h, double q) const {
+    double target = q * res;
+    int cumulative = 0;
+    for (int i = 0; i < 256; i++) {
+        cumulative += h[i];
+        if (cumulative >= target) {
+            return i;
+        }
+    }
+    return 255;
+}
+
 std::string Histogram::columnNames(ExportChannels channels) const {
     if (channels == ExportChannels::RGB) {
         return "r,g,b";
@@ -149,4 +203,36 @@ void Histogram::exportCDF(std::ostream &out, ExportChannels channels) const {
     for (int i = 0; i < 256; i++) {
         out << i << "," << c1[i] << "," << c2[i] << "," << c3[i] << "\n";
     }
+}
+
+void Histogram::exportStatistics(std::ostream &out, ExportChannels channels) const {
+    std::array<std::string, 3> names = {"r", "g", "b"};
+    std::array<Channel, 3> rows = {Channel::R, Channel::G, Channel::B};
+    int rowCount = 3;
+    if (channels == ExportChannels::Luminance) {
+        names[0] = space == LuminanceSpace::Lab ? "l" : "y";
+        rows[0] = Channel::L;
+        rowCount = 1;
+    } else if (greyscale) {
+        names[0] = "grey";
+        rows[0] = Channel::R;
+        rowCount = 1;
+    } else if (channels == ExportChannels::Space) {
+        names = space == LuminanceSpace::Lab ? std::array<std::string, 3>{"l", "a", "b"}
+                                             : std::array<std::string, 3>{"y", "cb", "cr"};
+        rows = {Channel::L, Channel::C1, Channel::C2};
+    }
+
+    std::ios::fmtflags flags = out.flags();
+    std::streamsize precision = out.precision();
+    out << std::fixed << std::setprecision(2);
+    out << "channel,min,max,range,p1,p99,range_p1_p99,mean,median,mode,std,p25,p75,iqr\n";
+    for (int r = 0; r < rowCount; r++) {
+        Statistics s = getStatistics(rows[r]);
+        out << names[r] << "," << s.min << "," << s.max << "," << s.range << "," << s.p1 << "," << s.p99 << ","
+            << s.percentileRange << "," << s.mean << "," << s.median << "," << s.mode << "," << s.stdDev << ","
+            << s.p25 << "," << s.p75 << "," << s.iqr << "\n";
+    }
+    out.flags(flags);
+    out.precision(precision);
 }

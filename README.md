@@ -1,7 +1,7 @@
 # HistoVis
 
 Toolkit for histogram operations on images. It includes:
-  - Visualizations of image histogram and CDF in RGB, YCbCr and Lab
+  - Visualizations and stats of image histogram and CDF in RGB, YCbCr and Lab
   - Global and local histogram equalization (classic and CLAHE)
   - Histogram matching
 
@@ -76,13 +76,14 @@ histovis <command> [arguments] [options]
 | `hist <input> [-o <file>] [-s <space>] [-l]`  | Export the histogram as CSV                   |
 | `pdf  <input> [-o <file>] [-s <space>] [-l]`  | Export the PDF as CSV                         |
 | `cdf  <input> [-o <file>] [-s <space>] [-l]`  | Export the CDF as CSV                         |
+| `stats <input> [-o <file>] [-s <space>] [-l]` | Export statistics as CSV, one row per channel |
 | `equalize <input> <output> [-m <mode>] [-w <n>] [-c <clip>] [-s <space>]` | Histogram equalization |
 | `match <input> <output> -r <ref> [-s <space>]` | Histogram matching against a reference image |
 
 | Option                      | Description                                                              |
 |-----------------------------|--------------------------------------------------------------------------|
-| `-o, --output <file>`       | Output file for hist/pdf/cdf (default: stdout)                           |
-| `-s, --space <space>`       | hist/pdf/cdf: channels to export, `rgb`, `ycbcr` or `lab` (default: `rgb`) |
+| `-o, --output <file>`       | Output file for hist/pdf/cdf/stats (default: stdout)                     |
+| `-s, --space <space>`       | hist/pdf/cdf/stats: channels to export, `rgb`, `ycbcr` or `lab` (default: `rgb`) |
 |                             | equalize/match: luminance space, `ycbcr` or `lab` (default: `ycbcr`)     |
 | `-l, --luminance`           | Export only the luminance: Y of YCbCr, or L* with `-s lab`               |
 | `-m, --mode <mode>`         | Equalization mode: `global`, `local` or `clahe` (default: `global`)      |
@@ -98,6 +99,7 @@ Examples:
 ```sh
 histovis hist photo.jpg -s lab -o hist.csv          # columns value,l,a,b
 histovis cdf photo.jpg -l                           # luminance CDF (Y) on stdout
+histovis stats photo.jpg -s ycbcr                   # min, max, mean, median, mode, std, P1/P25/P75/P99 of Y, Cb, Cr
 histovis equalize photo.jpg out.png -m local -w 31  # local equalization, 31x31 window
 histovis equalize photo.jpg out.png -m clahe -c 3   # CLAHE, default window
 histovis match photo.jpg out.png -r reference.jpg -s lab

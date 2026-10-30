@@ -20,6 +20,7 @@ inline void printUsage(const char *prog) {
               << "  hist <input> [-o <file>] [-s <space>] [-l]  Export the histogram as CSV\n"
               << "  pdf  <input> [-o <file>] [-s <space>] [-l]  Export the PDF as CSV\n"
               << "  cdf  <input> [-o <file>] [-s <space>] [-l]  Export the CDF as CSV\n"
+              << "  stats <input> [-o <file>] [-s <space>] [-l]  Export histogram stats as CSV\n"
               << "  equalize <input> <output> [-m <mode>] [-w <n>] [-c <clip>] [-s <space>]  Histogram equalization (output: .png, .jpg)\n"
               << "  match <input> <output> -r <ref> [-s <space>]  Histogram matching against a reference image (output: .png, .jpg)\n"
               << "\n"
@@ -27,7 +28,7 @@ inline void printUsage(const char *prog) {
               << "  -o, --output <file>       Output file (default: stdout)\n"
               << "  -r, --reference <file>    Reference image for match\n"
               << "  -l, --luminance           Export only the luminance: Y of YCbCr, or L* with -s lab\n"
-              << "  -s, --space <space>       hist/pdf/cdf: channels to export, rgb|ycbcr|lab (default: rgb)\n"
+              << "  -s, --space <space>       hist/pdf/cdf/stats: channels to export, rgb|ycbcr|lab (default: rgb)\n"
               << "                            equalize/match: luminance space, ycbcr|lab (default: ycbcr)\n"
               << "  -m, --mode <mode>         Equalization mode: global, local or clahe (default: global)\n"
               << "  -w, --window <n>          Window size in pixels for local/clahe, odd >= 3 (default: 1/8 of the shorter side)\n"
@@ -159,6 +160,36 @@ inline int cmdCdf(const ArgParser &args) {
         return 1;
     }
     hist.exportCDF(file, channels);
+    return 0;
+}
+
+inline int cmdStats(const ArgParser &args) {
+    const std::string &input = args.positional(0);
+    if (input.empty()) {
+        std::cerr << "Error: missing input image\n";
+        return 1;
+    }
+    Image image(input.c_str());
+    if (!image.isValid()) {
+        return 1;
+    }
+    LuminanceSpace space;
+    ExportChannels channels;
+    if (!parseExport(args, space, channels)) {
+        return 1;
+    }
+    Histogram hist(image, space);
+    std::string output = args.get("-o", "--output");
+    if (output.empty()) {
+        hist.exportStatistics(std::cout, channels);
+        return 0;
+    }
+    std::ofstream file(output);
+    if (!file) {
+        std::cerr << "Error: cannot open output file: " << output << "\n";
+        return 1;
+    }
+    hist.exportStatistics(file, channels);
     return 0;
 }
 

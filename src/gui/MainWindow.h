@@ -2,6 +2,7 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 
 #include <QAction>
 #include <QComboBox>
@@ -10,6 +11,7 @@
 #include <QMenu>
 #include <QPixmap>
 #include <QString>
+#include <QTableWidget>
 
 #include "core/Histogram.h"
 #include "core/Image.h"
@@ -28,7 +30,11 @@ private:
     void openImage();
     void loadImage(const QString &path);
     void saveImage();
-    void revertImage();
+    void resetImage();
+    void undo();
+    void redo();
+    void pushUndo();
+    void updateHistory();
     void equalizeGlobal();
     void equalizeLocal();
     void clahe();
@@ -40,9 +46,14 @@ private:
     void computeComponents();
     void updatePlots();
     void addChannelPlots(Channel channel, const QColor &color);
+    void addStatisticsColumn(Channel channel, const QString &name);
 
     QAction *saveAction = nullptr;
-    QAction *revertAction = nullptr;
+    QAction *undoAction = nullptr;
+    QAction *redoAction = nullptr;
+    QAction *resetAction = nullptr;
+    QAction *statsAction = nullptr;
+    QTableWidget *statsTable = nullptr;
     QMenu *toolsMenu = nullptr;
     QLabel *imageLabel = nullptr;
     QComboBox *spaceBox = nullptr;
@@ -52,6 +63,10 @@ private:
     PlotWidget *cdfPlot = nullptr;
 
     std::unique_ptr<Image> image;
+    std::unique_ptr<Image> original;
+    std::vector<std::unique_ptr<Image>> undoStack;
+    std::vector<std::unique_ptr<Image>> redoStack;
+    bool historyTrimmed = false;
     std::unique_ptr<Histogram> histogram;
     QString imagePath;
     QPixmap pixmap;
