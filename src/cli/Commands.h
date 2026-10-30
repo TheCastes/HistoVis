@@ -20,7 +20,7 @@ inline void printUsage(const char *prog) {
               << "  hist <input> [-o <file>] [-s <space>] [-l]  Export the histogram as CSV\n"
               << "  pdf  <input> [-o <file>] [-s <space>] [-l]  Export the PDF as CSV\n"
               << "  cdf  <input> [-o <file>] [-s <space>] [-l]  Export the CDF as CSV\n"
-              << "  equalize <input> <output> [-m <mode>] [-w <n>] [-s <space>]  Histogram equalization (output: .png, .jpg)\n"
+              << "  equalize <input> <output> [-m <mode>] [-w <n>] [-c <clip>] [-s <space>]  Histogram equalization (output: .png, .jpg)\n"
               << "  match <input> <output> -r <ref> [-s <space>]  Histogram matching against a reference image (output: .png, .jpg)\n"
               << "\n"
               << "Options:\n"
@@ -29,8 +29,9 @@ inline void printUsage(const char *prog) {
               << "  -l, --luminance           Export only the luminance: Y of YCbCr, or L* with -s lab\n"
               << "  -s, --space <space>       hist/pdf/cdf: channels to export, rgb|ycbcr|lab (default: rgb)\n"
               << "                            equalize/match: luminance space, ycbcr|lab (default: ycbcr)\n"
-              << "  -m, --mode <global|local> Equalization mode (default: global)\n"
-              << "  -w, --window <n>          Window size in pixels for local mode, odd >= 3 (default: 1/8 of the shorter side)\n"
+              << "  -m, --mode <mode>         Equalization mode: global, local or clahe (default: global)\n"
+              << "  -w, --window <n>          Window size in pixels for local/clahe, odd >= 3 (default: 1/8 of the shorter side)\n"
+              << "  -c, --clip <factor>       Clip limit for clahe, >= 1, 1 = no change (default: 2)\n"
               << "  -h, --help                Show this help message\n"
               << "\n";
 }
@@ -179,13 +180,28 @@ inline int cmdEqualize(const ArgParser &args) {
         return 1;
     }
     std::string mode = args.get("-m", "--mode", "global");
-    if (mode != "global" && mode != "local") {
-        std::cerr << "Error: unknown mode: " << mode << " (expected global or local)\n";
+    if (mode != "global" && mode != "local" && mode != "clahe") {
+        std::cerr << "Error: unknown mode: " << mode << " (expected global, local or clahe)\n";
+        return 1;
+    }
+    bool local = mode == "local" || mode == "clahe";
+    float clip = 0;
+    if (mode == "clahe") {
+        clip = args.getFloat("-c", "--clip", 2.0f);
+        if (clip < 1) {
+            std::cerr << "Error: clip limit must be >= 1\n";
+            return 1;
+        }
+        if (clip < 1.5f) {
+            std::cerr << "Warning: clip limits below 1.5 can be very slow with large windows\n";
+        }
+    } else if (args.has("-c", "--clip")) {
+        std::cerr << "Error: -c is only valid with -m clahe\n";
         return 1;
     }
     bool windowGiven = args.has("-w", "--window");
     int window = args.getInt("-w", "--window", 0);
-    if (mode == "local" && windowGiven && (window < 3 || window % 2 == 0)) {
+    if (local && windowGiven && (window < 3 || window % 2 == 0)) {
         std::cerr << "Error: window must be an odd number >= 3\n";
         return 1;
     }
@@ -193,16 +209,16 @@ inline int cmdEqualize(const ArgParser &args) {
     if (!image.isValid()) {
         return 1;
     }
-    if (mode == "local" && !windowGiven) {
+    if (local && !windowGiven) {
         window = std::min(image.getWidth(), image.getHeight()) / 8;
         window = std::max(3, window | 1);
     }
-    if (mode == "local" && window > std::min(image.getWidth(), image.getHeight())) {
+    if (local && window > std::min(image.getWidth(), image.getHeight())) {
         std::cerr << "Error: window larger than the image (" << image.getWidth() << "x" << image.getHeight() << ")\n";
         return 1;
     }
-    if (mode == "local") {
-        equalizeLocal(image, window, space);
+    if (local) {
+        equalizeLocal(image, window, space, clip);
     } else {
         equalize(image, space);
     }

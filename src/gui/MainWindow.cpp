@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 
 #include <QAction>
 #include <QApplication>
 #include <QColor>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontMetrics>
@@ -92,12 +94,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QAction *equalizeLocalAction = new QAction("Equalize (&local)...", this);
     connect(equalizeLocalAction, &QAction::triggered, this, &MainWindow::equalizeLocal);
 
+    QAction *claheAction = new QAction("&CLAHE...", this);
+    connect(claheAction, &QAction::triggered, this, &MainWindow::clahe);
+
     QAction *matchAction = new QAction("&Match...", this);
     connect(matchAction, &QAction::triggered, this, &MainWindow::matchImage);
 
     toolsMenu = menuBar()->addMenu("&Tools");
     toolsMenu->addAction(equalizeGlobalAction);
     toolsMenu->addAction(equalizeLocalAction);
+    toolsMenu->addAction(claheAction);
     toolsMenu->addAction(matchAction);
     toolsMenu->setEnabled(false);
 
@@ -267,6 +273,58 @@ void MainWindow::equalizeLocal() {
     refreshImage();
 }
 
+void MainWindow::clahe() {
+    int shorter = std::min(image->getWidth(), image->getHeight());
+    if (shorter < 3) {
+        QMessageBox::warning(this, "Error", "Image too small for CLAHE");
+        return;
+    }
+    int maxWindow = shorter % 2 == 0 ? shorter - 1 : shorter;
+    int defaultWindow = std::min(std::max(3, (shorter / 8) | 1), maxWindow);
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("CLAHE");
+    QComboBox *spaceChoice = new QComboBox;
+    spaceChoice->addItems({"YCbCr", "Lab"});
+    QSpinBox *windowChoice = new QSpinBox;
+    windowChoice->setRange(3, maxWindow);
+    windowChoice->setSingleStep(2);
+    windowChoice->setValue(defaultWindow);
+    windowChoice->setSuffix(" px");
+    QDoubleSpinBox *clipChoice = new QDoubleSpinBox;
+    clipChoice->setRange(1.0, 20.0);
+    clipChoice->setSingleStep(0.5);
+    clipChoice->setDecimals(1);
+    clipChoice->setValue(2.0);
+    QLabel *clipWarning = new QLabel("Clip limits below 1.5 can be very slow with large windows");
+    clipWarning->setStyleSheet("color: #c06000;");
+    clipWarning->setVisible(false);
+    connect(clipChoice, &QDoubleSpinBox::valueChanged, clipWarning, [clipWarning](double value) {
+        clipWarning->setVisible(value < 1.5);
+    });
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QFormLayout *form = new QFormLayout(&dialog);
+    form->addRow("Space:", spaceChoice);
+    form->addRow("Window (odd):", windowChoice);
+    form->addRow("Clip limit:", clipChoice);
+    form->addRow("", clipWarning);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    LuminanceSpace space = spaceChoice->currentIndex() == 1 ? LuminanceSpace::Lab : LuminanceSpace::YCbCr;
+    int window = windowChoice->value() | 1;
+    float clip = static_cast<float>(clipChoice->value());
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    ::equalizeLocal(*image, window, space, clip);
+    QApplication::restoreOverrideCursor();
+    setWindowTitle("HistoVis - " + QFileInfo(imagePath).fileName() + " (modified)");
+    refreshImage();
+}
+
 void MainWindow::matchImage() {
     QDialog dialog(this);
     dialog.setWindowTitle("Match");
@@ -286,6 +344,13 @@ void MainWindow::matchImage() {
     previewLabel->setFixedSize(240, 180);
     previewLabel->setAlignment(Qt::AlignCenter);
     previewLabel->setFrameShape(QFrame::StyledPanel);
+    PlotWidget *referencePlot = new PlotWidget("Reference", PlotWidget::Style::Bars);
+    referencePlot->setFixedSize(320, 180);
+    QWidget *previewRow = new QWidget;
+    QHBoxLayout *previewLayout = new QHBoxLayout(previewRow);
+    previewLayout->setContentsMargins(0, 0, 0, 0);
+    previewLayout->addWidget(previewLabel);
+    previewLayout->addWidget(referencePlot);
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     buttons->button(QDialogButtonBox::Ok)->setEnabled(false);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -293,10 +358,30 @@ void MainWindow::matchImage() {
     QFormLayout *form = new QFormLayout(&dialog);
     form->addRow("Space:", spaceChoice);
     form->addRow("Reference:", referenceRow);
-    form->addRow("", previewLabel);
+    form->addRow("", previewRow);
     form->addRow(buttons);
 
     std::unique_ptr<Image> reference;
+    std::function<void()> updateReferencePlot = [&]() {
+        referencePlot->clear();
+        if (!reference) {
+            return;
+        }
+        LuminanceSpace space = spaceChoice->currentIndex() == 1 ? LuminanceSpace::Lab : LuminanceSpace::YCbCr;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        Histogram histogram(*reference, space);
+        QApplication::restoreOverrideCursor();
+        Channel channel = histogram.isGreyscale() ? Channel::R : Channel::L;
+        const std::array<int, 256> &counts = histogram.getHistogram(channel);
+        std::array<float, 256> values{};
+        for (int i = 0; i < 256; i++) {
+            values[i] = static_cast<float>(counts[i]);
+        }
+        referencePlot->addSeries(values, palette().color(QPalette::WindowText));
+    };
+    connect(spaceChoice, &QComboBox::currentIndexChanged, &dialog, [&]() {
+        updateReferencePlot();
+    });
     connect(browseButton, &QPushButton::clicked, &dialog, [&]() {
         QString path = QFileDialog::getOpenFileName(&dialog, "Open reference image", QFileInfo(imagePath).absolutePath(),
                                                     "Images (*.png *.jpg *.jpeg *.bmp);;All files (*)");
@@ -312,6 +397,7 @@ void MainWindow::matchImage() {
         referenceEdit->setText(path);
         previewLabel->setPixmap(QPixmap::fromImage(toQImage(*reference))
                                     .scaled(previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        updateReferencePlot();
         buttons->button(QDialogButtonBox::Ok)->setEnabled(true);
     });
     if (dialog.exec() != QDialog::Accepted) {

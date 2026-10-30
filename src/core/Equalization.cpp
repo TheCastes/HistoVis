@@ -1,6 +1,8 @@
 #include "Equalization.h"
 
+#include <algorithm>
 #include <cmath>
+#include <thread>
 #include <vector>
 
 #include "ColorSpace.h"
@@ -35,6 +37,80 @@ namespace {
         }
         return i;
     }
+
+    void clipHistogram(std::array<int, 256>& histogram, int clipLimit) {
+        int excess = 0;
+        for (int i = 0; i < 256; i++) {
+            if (histogram[i] > clipLimit) {
+                excess += histogram[i] - clipLimit;
+            }
+        }
+        int binIncr = excess / 256;
+        int upper = clipLimit - binIncr;
+        for (int i = 0; i < 256; i++) {
+            if (histogram[i] > clipLimit) {
+                histogram[i] = clipLimit;
+            } else if (histogram[i] > upper) {
+                excess -= clipLimit - histogram[i];
+                histogram[i] = clipLimit;
+            } else {
+                excess -= binIncr;
+                histogram[i] += binIncr;
+            }
+        }
+        while (excess > 0) {
+            for (int start = 0; start < 256 && excess > 0; start++) {
+                int step = std::max(1, 256 / excess);
+                for (int i = start; i < 256 && excess > 0; i += step) {
+                    if (histogram[i] < clipLimit) {
+                        histogram[i]++;
+                        excess--;
+                    }
+                }
+            }
+        }
+    }
+
+   
+    void equalizeRows(const std::vector<uint8_t>& oldLuminance, std::vector<float>& equalizedLuminance,
+                      int width, int height, int window, float clipFactor, int clipLimit, int firstRow, int lastRow) {
+        std::array<int, 256> tempHist;
+        std::array<int, 256> clippedHist;
+        int halfWindow = window / 2;
+        for (int i = firstRow; i < lastRow; i++) {
+            for (int j = 0; j < width; j++) {
+               if (j == 0) {
+                    tempHist = {};
+                   for (int k = i-halfWindow; k <= i+halfWindow; k++) {
+                       for (int l = -halfWindow; l <= +halfWindow; l++) {
+                           tempHist[oldLuminance[mirror(k, height) * width + mirror(l, width)]]++;
+                       }
+                   }
+               } else {
+                   int leaving = mirror(j - halfWindow -1, width);
+                   int entering = mirror(j + halfWindow, width);
+                   for (int k = i-halfWindow; k <= i+halfWindow; k++) {
+                       tempHist[oldLuminance[mirror(k, height)*width + leaving]]--;
+                       tempHist[oldLuminance[mirror(k, height)*width + entering]]++;
+                   }
+               }
+                int center = oldLuminance[i* width + j];
+                int sum = 0;
+                if (clipFactor > 0) {
+                    clippedHist = tempHist;
+                    clipHistogram(clippedHist, clipLimit);
+                    for (int k = 0; k <= center; k++) {
+                        sum += clippedHist[k];
+                    }
+                } else {
+                    for (int k = 0; k <= center; k++) {
+                        sum += tempHist[k];
+                    }
+                }
+                equalizedLuminance[i*width+j] = 255.0f * sum / (window*window);
+            }
+        }
+    }
 } //namespace
 
 void equalize(Image& image, LuminanceSpace space) {
@@ -52,41 +128,30 @@ void equalize(Image& image, LuminanceSpace space) {
     applyLUT(image, T, space);
 }
 
-void equalizeLocal(Image& image, int window, LuminanceSpace space) {
+void equalizeLocal(Image& image, int window, LuminanceSpace space, float clipFactor) {
     int width = image.getWidth();
     int height = image.getHeight();
     std::vector<uint8_t> oldLuminance(width * height, 0);
     std::vector<float> equalizedLuminance(width * height, 0);
-    std::array<int, 256> tempHist;
-    int halfWindow = window / 2;
+    int windowPixels = window * window;
+    int clipLimit = std::max(static_cast<int>(clipFactor * windowPixels / 256), (windowPixels + 255) / 256);
     if (image.getChannels() < 3) {
         oldLuminance = computeLuminanceBins(image, true, space);
     } else {
         oldLuminance = computeLuminanceBins(image, false, space);
     }
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-           if (j == 0) {
-                tempHist = {};
-               for (int k = i-halfWindow; k <= i+halfWindow; k++) {
-                   for (int l = -halfWindow; l <= +halfWindow; l++) {
-                       tempHist[oldLuminance[mirror(k, height) * width + mirror(l, width)]]++;
-                   }
-               }
-           } else {
-               int leaving = mirror(j - halfWindow -1, width);
-               int entering = mirror(j + halfWindow, width);
-               for (int k = i-halfWindow; k <= i+halfWindow; k++) {
-                   tempHist[oldLuminance[mirror(k, height)*width + leaving]]--;
-                   tempHist[oldLuminance[mirror(k, height)*width + entering]]++;
-               }
-           }
-            int center = oldLuminance[i* width + j];
-            int sum = 0;
-            for (int k = 0; k <= center; k++) {
-                sum += tempHist[k];
-            }
-            equalizedLuminance[i*width+j] = 255.0f * sum / (window*window);
+    int threadCount = static_cast<int>(std::max(1u, std::thread::hardware_concurrency()));
+    threadCount = std::min(threadCount, height);
+    {
+        std::vector<std::jthread> threads;
+        for (int t = 0; t < threadCount; t++) {
+            int firstRow = height * t / threadCount;
+            int lastRow = height * (t + 1) / threadCount;
+            threads.emplace_back([&oldLuminance, &equalizedLuminance, width, height, window, clipFactor, clipLimit,
+                                  firstRow, lastRow]() {
+                equalizeRows(oldLuminance, equalizedLuminance, width, height, window, clipFactor, clipLimit,
+                             firstRow, lastRow);
+            });
         }
     }
     if (image.getChannels() < 3) {

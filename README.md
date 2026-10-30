@@ -2,7 +2,7 @@
 
 Toolkit for histogram operations on images. It includes:
   - Visualizations of image histogram and CDF in RGB, YCbCr and Lab
-  - Global and local histogram equalization
+  - Global and local histogram equalization (classic and CLAHE)
   - Histogram matching
 
 It can be used with a GUI (written with Qt), or as a CLI if you prefer.
@@ -21,7 +21,7 @@ Prebuilt binaries are on the [Releases](https://github.com/TheCastes/HistoVis/re
 
 ## Build
 
-Requirements: CMake >= 3.21 and a C++20 compiler. Thehe GUI needs Qt 6.4 or newer GUI also needs Qt 6.3 or newer (Widgets).
+Requirements: CMake >= 3.21 and a C++20 compiler. The GUI needs Qt 6.4 or newer.
 Image loading and saving use [stb](https://github.com/nothings/stb).
 
 If you want to build only the CLI, turn HISTOVIS_BUILD_GUI flag in CMake as OFF.
@@ -76,7 +76,7 @@ histovis <command> [arguments] [options]
 | `hist <input> [-o <file>] [-s <space>] [-l]`  | Export the histogram as CSV                   |
 | `pdf  <input> [-o <file>] [-s <space>] [-l]`  | Export the PDF as CSV                         |
 | `cdf  <input> [-o <file>] [-s <space>] [-l]`  | Export the CDF as CSV                         |
-| `equalize <input> <output> [-m <mode>] [-w <n>] [-s <space>]` | Histogram equalization        |
+| `equalize <input> <output> [-m <mode>] [-w <n>] [-c <clip>] [-s <space>]` | Histogram equalization |
 | `match <input> <output> -r <ref> [-s <space>]` | Histogram matching against a reference image |
 
 | Option                      | Description                                                              |
@@ -85,8 +85,9 @@ histovis <command> [arguments] [options]
 | `-s, --space <space>`       | hist/pdf/cdf: channels to export, `rgb`, `ycbcr` or `lab` (default: `rgb`) |
 |                             | equalize/match: luminance space, `ycbcr` or `lab` (default: `ycbcr`)     |
 | `-l, --luminance`           | Export only the luminance: Y of YCbCr, or L* with `-s lab`               |
-| `-m, --mode <global\|local>` | Equalization mode (default: `global`)                                   |
-| `-w, --window <n>`          | Window size for local mode, odd >= 3 (default: 1/8 of the shorter side)  |
+| `-m, --mode <mode>`         | Equalization mode: `global`, `local` or `clahe` (default: `global`)      |
+| `-w, --window <n>`          | Window size for local/clahe, odd >= 3 (default: 1/8 of the shorter side) |
+| `-c, --clip <factor>`       | Clip limit for clahe, >= 1, 1 = no change (default: 2)                   |
 | `-r, --reference <file>`    | Reference image for match                                                |
 | `-h, --help`                | Show the help                                                            |
 
@@ -98,6 +99,7 @@ Examples:
 histovis hist photo.jpg -s lab -o hist.csv          # columns value,l,a,b
 histovis cdf photo.jpg -l                           # luminance CDF (Y) on stdout
 histovis equalize photo.jpg out.png -m local -w 31  # local equalization, 31x31 window
+histovis equalize photo.jpg out.png -m clahe -c 3   # CLAHE, default window
 histovis match photo.jpg out.png -r reference.jpg -s lab
 ```
 

@@ -54,6 +54,18 @@ public:
         }
     }
 
+    float getFloat(const std::string &shortKey, const std::string &longKey, float fallback) const {
+        std::string value = get(shortKey, longKey);
+        if (value.empty()) {
+            return fallback;
+        }
+        try {
+            return std::stof(value);
+        } catch (...) {
+            return fallback;
+        }
+    }
+
     const std::string &positional(size_t index) const {
         static const std::string empty;
         return index < positionals.size() ? positionals[index] : empty;

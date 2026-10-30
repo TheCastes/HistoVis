@@ -31,6 +31,7 @@ private:
     void revertImage();
     void equalizeGlobal();
     void equalizeLocal();
+    void clahe();
     void matchImage();
     void refreshImage();
     void showImage();

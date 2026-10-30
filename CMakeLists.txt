@@ -33,6 +33,8 @@ target_include_directories(histovis_core
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external
 )
 target_compile_options(histovis_core PRIVATE ${HISTOVIS_WARNINGS})
+find_package(Threads REQUIRED)
+target_link_libraries(histovis_core PUBLIC Threads::Threads)
 set_source_files_properties(src/core/StbImpl.cpp PROPERTIES COMPILE_OPTIONS "-w")
 
 if (HISTOVIS_BUILD_CLI)
