@@ -30,6 +30,8 @@ private:
     void openImage();
     void loadImage(const QString &path);
     void saveImage();
+    void exportPlots();
+    void exportData(const QString &kind);
     void resetImage();
     void undo();
     void redo();
@@ -51,6 +53,9 @@ private:
     void addStatisticsColumn(Channel channel, const QString &name);
 
     QAction *saveAction = nullptr;
+    QAction *exportPlotsAction = nullptr;
+    QMenu *exportMenu = nullptr;
+    QWidget *plotsPanel = nullptr;
     QAction *undoAction = nullptr;
     QAction *redoAction = nullptr;
     QAction *resetAction = nullptr;

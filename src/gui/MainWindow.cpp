@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <fstream>
 #include <functional>
 
 #include <QAction>
@@ -74,12 +75,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveImage);
 
     QAction *quitAction = new QAction(QIcon::fromTheme("application-exit"), "&Quit", this);
-    quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &MainWindow::close);
+
+    exportPlotsAction = new QAction("Export &plots...", this);
+    exportPlotsAction->setEnabled(false);
+    connect(exportPlotsAction, &QAction::triggered, this, &MainWindow::exportPlots);
 
     QMenu *fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(openAction);
     fileMenu->addAction(saveAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(exportPlotsAction);
+    exportMenu = fileMenu->addMenu("Export &data");
+    exportMenu->addAction("&Histogram...", this, [this]() { exportData("hist"); });
+    exportMenu->addAction("&PDF...", this, [this]() { exportData("pdf"); });
+    exportMenu->addAction("&CDF...", this, [this]() { exportData("cdf"); });
+    exportMenu->addAction("&Statistics...", this, [this]() { exportData("stats"); });
+    exportMenu->setEnabled(false);
     fileMenu->addSeparator();
     fileMenu->addAction(quitAction);
 
@@ -178,7 +190,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     histogramPlot = new PlotWidget("Histogram", PlotWidget::Style::Bars);
     cdfPlot = new PlotWidget("CDF", PlotWidget::Style::Line);
 
-    QWidget *plotsPanel = new QWidget;
+    plotsPanel = new QWidget;
     QVBoxLayout *plotsLayout = new QVBoxLayout(plotsPanel);
     plotsLayout->setContentsMargins(0, 0, 0, 0);
     plotsLayout->addWidget(histogramPlot);
@@ -238,6 +250,8 @@ void MainWindow::loadImage(const QString &path) {
     historyTrimmed = false;
     imagePath = path;
     saveAction->setEnabled(true);
+    exportPlotsAction->setEnabled(true);
+    exportMenu->setEnabled(true);
     toolsMenu->setEnabled(true);
     updateHistory();
     computeOriginalHistogram();
@@ -266,6 +280,59 @@ void MainWindow::saveImage() {
     }
     if (!saved) {
         QMessageBox::warning(this, "Error", "Cannot save image:\n" + path);
+    }
+}
+
+void MainWindow::exportPlots() {
+    QFileInfo info(imagePath);
+    QString suggested = info.absolutePath() + "/" + info.completeBaseName() + "_plots.png";
+    QString path = QFileDialog::getSaveFileName(this, "Export plots", suggested, "PNG (*.png)");
+    if (path.isEmpty()) {
+        return;
+    }
+    if (QFileInfo(path).suffix().isEmpty()) {
+        path += ".png";
+    }
+    const qreal scale = 2.0;
+    QPixmap plotsImage(plotsPanel->size() * scale);
+    plotsImage.setDevicePixelRatio(scale);
+    plotsImage.fill(palette().color(QPalette::Window));
+    plotsPanel->render(&plotsImage);
+    if (!plotsImage.save(path, "PNG")) {
+        QMessageBox::warning(this, "Error", "Cannot save plots:\n" + path);
+    }
+}
+
+void MainWindow::exportData(const QString &kind) {
+    QFileInfo info(imagePath);
+    QString suggested = info.absolutePath() + "/" + info.completeBaseName() + "_" +
+                        spaceBox->currentText().toLower() + "_" + kind + ".csv";
+    QString path = QFileDialog::getSaveFileName(this, "Export data", suggested, "CSV (*.csv)");
+    if (path.isEmpty()) {
+        return;
+    }
+    if (QFileInfo(path).suffix().isEmpty()) {
+        path += ".csv";
+    }
+    std::ofstream file(path.toLocal8Bit().constData());
+    if (!file) {
+        QMessageBox::warning(this, "Error", "Cannot write file:\n" + path);
+        return;
+    }
+    //RGB view: r,g,b; YCbCr or Lab view: the three channels of the space, like -s in the CLI
+    ExportChannels channels = spaceBox->currentIndex() == 0 ? ExportChannels::RGB : ExportChannels::Space;
+    if (kind == "hist") {
+        histogram->exportHistogram(file, channels);
+    } else if (kind == "pdf") {
+        histogram->exportPDF(file, channels);
+    } else if (kind == "cdf") {
+        histogram->exportCDF(file, channels);
+    } else {
+        histogram->exportStatistics(file, channels);
+    }
+    file.close();
+    if (file.fail()) {
+        QMessageBox::warning(this, "Error", "Cannot write file:\n" + path);
     }
 }
 

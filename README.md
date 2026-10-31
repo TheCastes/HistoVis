@@ -1,7 +1,7 @@
 # HistoVis
 
 Toolkit for histogram operations on images. It includes:
-  - Visualizations and stats of image histogram and CDF in RGB, YCbCr and Lab
+  - Visualizations and stats of image histogram and CDF in RGB, YCbCr and Lab (exportable)
   - Global and local histogram equalization (classic and CLAHE)
   - Histogram matching
 
