@@ -1,6 +1,7 @@
 #include "PlotWidget.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <QLineF>
 #include <QPainter>
@@ -16,14 +17,26 @@ PlotWidget::PlotWidget(const QString &title, Style style, QWidget *parent)
     setMinimumHeight(150);
 }
 
-void PlotWidget::addSeries(const std::array<float, 256> &values, const QColor &color) {
-    series.push_back(Series{values, color});
+void PlotWidget::addSeries(const std::array<float, 256> &values, const QColor &color, bool original) {
+    series.push_back(Series{values, color, original});
     update();
 }
 
 void PlotWidget::clear() {
     series.clear();
     update();
+}
+
+void PlotWidget::setLogScale(bool enabled) {
+    logScale = enabled;
+    update();
+}
+
+double PlotWidget::fraction(float value, float maxValue) const {
+    if (logScale) {
+        return std::log10(1.0 + value) / std::log10(1.0 + maxValue);
+    }
+    return value / maxValue;
 }
 
 void PlotWidget::paintEvent(QPaintEvent *) {
@@ -54,9 +67,19 @@ void PlotWidget::paintEvent(QPaintEvent *) {
         maxValue = std::max(maxValue, *std::max_element(s.values.begin(), s.values.end()));
     }
     if (maxValue > 0) {
-        for (int k = 0; k <= 4; k++) {
-            float value = maxValue * k / 4.0f;
-            double y = plot.bottom() - plot.height() * k / 4.0;
+        std::vector<float> ticks;
+        if (logScale) {
+            ticks.push_back(0);
+            for (float t = 1; t <= maxValue; t *= 10) {
+                ticks.push_back(t);
+            }
+        } else {
+            for (int k = 0; k <= 4; k++) {
+                ticks.push_back(maxValue * k / 4.0f);
+            }
+        }
+        for (float value : ticks) {
+            double y = plot.bottom() - fraction(value, maxValue) * plot.height();
             QString label = maxValue >= 10 ? QString::number(value, 'f', 0) : QString::number(value, 'f', 2);
             painter.setPen(gridColor);
             painter.drawLine(QLineF(plot.left(), y, plot.right(), y));
@@ -65,29 +88,55 @@ void PlotWidget::paintEvent(QPaintEvent *) {
             painter.drawText(QRectF(0, y - 8, left - 8, 16), Qt::AlignRight | Qt::AlignVCenter, label);
         }
 
+        int currentCount = 0;
         for (const Series &s : series) {
-            if (style == Style::Bars) {
-                QColor color = s.color;
-                if (series.size() > 1) {
-                    color.setAlpha(110);
+            if (!s.original) {
+                currentCount++;
+            }
+        }
+        for (bool drawOriginals : {false, true}) {
+            for (const Series &s : series) {
+                if (s.original != drawOriginals) {
+                    continue;
                 }
-                for (int i = 0; i < 256; i++) {
-                    int x0 = qRound(plot.left() + i * binWidth);
-                    int x1 = qRound(plot.left() + (i + 1) * binWidth);
-                    int barHeight = qRound(s.values[i] / maxValue * plot.height());
-                    painter.fillRect(QRect(x0, qRound(plot.bottom()) - barHeight, x1 - x0, barHeight), color);
+                if (s.original) {
+                    QPolygonF line;
+                    for (int i = 0; i < 256; i++) {
+                        double y = plot.bottom() - fraction(s.values[i], maxValue) * plot.height();
+                        if (style == Style::Bars) {
+                            line.append(QPointF(plot.left() + i * binWidth, y));
+                            line.append(QPointF(plot.left() + (i + 1) * binWidth, y));
+                        } else {
+                            line.append(QPointF(plot.left() + (i + 0.5) * binWidth, y));
+                        }
+                    }
+                    painter.setRenderHint(QPainter::Antialiasing, true);
+                    painter.setPen(QPen(s.color, 1.5, Qt::DashLine));
+                    painter.drawPolyline(line);
+                    painter.setRenderHint(QPainter::Antialiasing, false);
+                } else if (style == Style::Bars) {
+                    QColor color = s.color;
+                    if (currentCount > 1) {
+                        color.setAlpha(110);
+                    }
+                    for (int i = 0; i < 256; i++) {
+                        int x0 = qRound(plot.left() + i * binWidth);
+                        int x1 = qRound(plot.left() + (i + 1) * binWidth);
+                        int barHeight = qRound(fraction(s.values[i], maxValue) * plot.height());
+                        painter.fillRect(QRect(x0, qRound(plot.bottom()) - barHeight, x1 - x0, barHeight), color);
+                    }
+                } else {
+                    QPolygonF line;
+                    for (int i = 0; i < 256; i++) {
+                        double x = plot.left() + (i + 0.5) * binWidth;
+                        double y = plot.bottom() - fraction(s.values[i], maxValue) * plot.height();
+                        line.append(QPointF(x, y));
+                    }
+                    painter.setRenderHint(QPainter::Antialiasing, true);
+                    painter.setPen(QPen(s.color, 2));
+                    painter.drawPolyline(line);
+                    painter.setRenderHint(QPainter::Antialiasing, false);
                 }
-            } else {
-                QPolygonF line;
-                for (int i = 0; i < 256; i++) {
-                    double x = plot.left() + (i + 0.5) * binWidth;
-                    double y = plot.bottom() - s.values[i] / maxValue * plot.height();
-                    line.append(QPointF(x, y));
-                }
-                painter.setRenderHint(QPainter::Antialiasing, true);
-                painter.setPen(QPen(s.color, 2));
-                painter.drawPolyline(line);
-                painter.setRenderHint(QPainter::Antialiasing, false);
             }
         }
     }

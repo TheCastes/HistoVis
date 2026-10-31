@@ -27,7 +27,7 @@ inline void printUsage(const char *prog) {
               << "Options:\n"
               << "  -o, --output <file>       Output file (default: stdout)\n"
               << "  -r, --reference <file>    Reference image for match\n"
-              << "  -l, --luminance           Export only the luminance: Y of YCbCr, or L* with -s lab\n"
+              << "  -l, --luminance           Export only the luminance Y of YCbCr, or L* with -s lab\n"
               << "  -s, --space <space>       hist/pdf/cdf/stats: channels to export, rgb|ycbcr|lab (default: rgb)\n"
               << "                            equalize/match: luminance space, ycbcr|lab (default: ycbcr)\n"
               << "  -m, --mode <mode>         Equalization mode: global, local or clahe (default: global)\n"

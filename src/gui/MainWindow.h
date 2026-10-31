@@ -43,6 +43,8 @@ private:
     void showImage();
     void changeSpace();
     void computeHistogram();
+    void computeOriginalHistogram();
+    bool isModified() const;
     void computeComponents();
     void updatePlots();
     void addChannelPlots(Channel channel, const QColor &color);
@@ -53,6 +55,8 @@ private:
     QAction *redoAction = nullptr;
     QAction *resetAction = nullptr;
     QAction *statsAction = nullptr;
+    QAction *showOriginalAction = nullptr;
+    QAction *logScaleAction = nullptr;
     QTableWidget *statsTable = nullptr;
     QMenu *toolsMenu = nullptr;
     QLabel *imageLabel = nullptr;
@@ -68,6 +72,7 @@ private:
     std::vector<std::unique_ptr<Image>> redoStack;
     bool historyTrimmed = false;
     std::unique_ptr<Histogram> histogram;
+    std::unique_ptr<Histogram> originalHistogram;
     QString imagePath;
     QPixmap pixmap;
     std::array<QPixmap, 3> componentPixmaps;

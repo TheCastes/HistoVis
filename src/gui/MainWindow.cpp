@@ -113,6 +113,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QMenu *viewMenu = menuBar()->addMenu("&View");
     viewMenu->addAction(statsAction);
 
+    showOriginalAction = new QAction("Show &original", this);
+    showOriginalAction->setCheckable(true);
+    connect(showOriginalAction, &QAction::toggled, this, &MainWindow::updatePlots);
+    viewMenu->addAction(showOriginalAction);
+
+    logScaleAction = new QAction("&Logarithmic scale", this);
+    logScaleAction->setCheckable(true);
+    connect(logScaleAction, &QAction::toggled, this, [this](bool checked) {
+        histogramPlot->setLogScale(checked);
+    });
+    viewMenu->addAction(logScaleAction);
+
     QAction *equalizeGlobalAction = new QAction("Equalize (&global)...", this);
     connect(equalizeGlobalAction, &QAction::triggered, this, &MainWindow::equalizeGlobal);
 
@@ -228,6 +240,7 @@ void MainWindow::loadImage(const QString &path) {
     saveAction->setEnabled(true);
     toolsMenu->setEnabled(true);
     updateHistory();
+    computeOriginalHistogram();
     refreshImage();
 }
 
@@ -304,7 +317,7 @@ void MainWindow::pushUndo() {
 }
 
 void MainWindow::updateHistory() {
-    bool modified = !undoStack.empty() || historyTrimmed;
+    bool modified = isModified();
     undoAction->setEnabled(!undoStack.empty());
     redoAction->setEnabled(!redoStack.empty());
     resetAction->setEnabled(modified || !redoStack.empty());
@@ -590,6 +603,7 @@ void MainWindow::changeSpace() {
     imageBox->setCurrentIndex(0);
     imageBox->blockSignals(false);
 
+    computeOriginalHistogram();
     computeHistogram();
     computeComponents();
     updatePlots();
@@ -637,6 +651,20 @@ void MainWindow::computeHistogram() {
     QApplication::setOverrideCursor(Qt::WaitCursor);
     histogram = std::make_unique<Histogram>(*image, space);
     QApplication::restoreOverrideCursor();
+}
+
+void MainWindow::computeOriginalHistogram() {
+    if (!original) {
+        return;
+    }
+    LuminanceSpace space = spaceBox->currentIndex() == 2 ? LuminanceSpace::Lab : LuminanceSpace::YCbCr;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    originalHistogram = std::make_unique<Histogram>(*original, space);
+    QApplication::restoreOverrideCursor();
+}
+
+bool MainWindow::isModified() const {
+    return !undoStack.empty() || historyTrimmed;
 }
 
 void MainWindow::updatePlots() {
@@ -689,4 +717,14 @@ void MainWindow::addChannelPlots(Channel channel, const QColor &color) {
     }
     histogramPlot->addSeries(countValues, color);
     cdfPlot->addSeries(histogram->getCDF(channel), color);
+
+    if (showOriginalAction->isChecked() && isModified() && originalHistogram) {
+        const std::array<int, 256> &originalCounts = originalHistogram->getHistogram(channel);
+        std::array<float, 256> originalValues{};
+        for (int i = 0; i < 256; i++) {
+            originalValues[i] = static_cast<float>(originalCounts[i]);
+        }
+        histogramPlot->addSeries(originalValues, color, true);
+        cdfPlot->addSeries(originalHistogram->getCDF(channel), color, true);
+    }
 }
